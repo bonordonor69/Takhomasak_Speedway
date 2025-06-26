@@ -1,0 +1,1318 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Takhomasak Speedway</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="icon" href="data:,">
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap" rel="stylesheet">
+<style>
+    body {
+        font-family: 'Bebas Neue', sans-serif;
+        background: #2c3340; /* Darker, less saturated navy blue */
+        color: #E6E6E6; /* Light gray for general text readability */
+        margin: 0;
+    }
+
+    h1 {
+        font-size: 4rem;
+        color: #4FC3F7; /* Sky blue for title */
+        text-shadow: 2px 2px #F68B1F; /* Orange drop shadow */
+        margin: 1rem;
+    }
+
+    .container {
+        max-width: 90vw;
+        margin: 0 auto;
+        padding: 1rem;
+        padding-bottom: 2rem;
+    }
+
+    .lanes {
+        display: flex;
+        flex-direction: row;
+        gap: 1rem;
+    }
+
+    .lane {
+        flex: 1;
+        padding: 1rem;
+        border: 2px solid #E6E6E6; /* Light gray border */
+        border-radius: 8px;
+        box-shadow: 3px 3px 5px rgba(0, 0, 0, 0.5);
+        text-align: center;
+    }
+
+    .yellow { background: #ff0; color: #000; }
+    .red { background: #f00; }
+    .blue { background: #00f; }
+    .green { background: #0f0; }
+    .purple { background: #800080; }
+    .orange { background: #ffa500; }
+    .pink { background: #ff69b4; }
+    .cyan { background: #00ffff; }
+    .white { background: #fff; color: #000; }
+    .black { background: #000; }
+    .red-to-black { background: linear-gradient(to right, #f00, #000); }
+    .blue-to-white { background: linear-gradient(to right, #00f, #fff); color: #000; }
+    .yellow-to-black { background: linear-gradient(to right, #ff0, #000); }
+    .green-to-blue { background: linear-gradient(to right, #0f0, #00f); }
+    .purple-to-pink { background: linear-gradient(to right, #800080, #ff69b4); }
+    .gulf-blue-to-orange { background: linear-gradient(to right, #66B2E4, #F68B1F); }
+    .rainbow { background: linear-gradient(to right, #ff0000, #ff9900, #33cc33, #3399ff, #cc33cc); }
+
+    .yellow.lap-animation { animation: pulseYellow 0.3s ease-out; }
+    .red.lap-animation { animation: pulseRed 0.3s ease-out; }
+    .blue.lap-animation { animation: pulseBlue 0.3s ease-out; }
+    .yellow.best-lap-animation, .red.best-lap-animation, .blue.best-lap-animation {
+        animation: pulseGold 0.5s ease-out;
+    }
+
+    h2 {
+        font-size: 2.5rem;
+        margin: 0.5rem;
+    }
+
+    p {
+        font-size: 1.5rem;
+        margin: 0.5rem;
+    }
+
+    .status {
+        font-size: 2rem;
+        margin: 1rem;
+    }
+
+    .status.running { color: #66B3E4; } /Light Gulf Blue
+    .status.stopped { color: #f00; }
+    .status.countdown3, .status.countdown2, .status.countdown1 { color: #F68B1F; } /* Gulf Orange for countdown */
+    .status.go {
+        font-size: 2.5rem;
+        color: #129a1d; /* Green for GO! */
+        animation: pulseGo 1.25s ease-out;
+    }
+
+    button {
+        padding: 1rem 2rem;
+        margin: 0.5rem;
+        font-size: 1.5rem;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        color: #fff;
+    }
+
+    .start {
+        background: linear-gradient(#0f0, #050);
+        text-shadow: 1px 1px #000;
+    }
+
+    .reset {
+        background: linear-gradient(#f00, #500);
+        text-shadow: 1px 1px #000;
+    }
+
+    .lap-btn {
+        font-size: 1.2rem;
+        padding: 0.5rem 1rem;
+    }
+
+    .kick-btn {
+        font-size: 1.2rem;
+        padding: 0.5rem 1rem;
+        background: #fff;
+        color: #000;
+    }
+
+    .yellow .lap-btn, .yellow .kick-btn { background: #000; color: #ff0; }
+    .red .lap-btn, .red .kick-btn { background: #fff; color: #f00; }
+    .blue .lap-btn, .blue .kick-btn { background: #fff; color: #00f; }
+    .stats-btn { background: #66B2E4; color: #000; } /* Light blue for stats */
+    .settings-btn {
+        background: linear-gradient(#F68B1F, #A85B13); /* Orange gradient */
+        color: #000;
+        text-shadow: 1px 1px #fff;
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 0.5rem 0;
+        font-size: 1.2rem;
+    }
+
+    th, td {
+        border: 1px solid #E6E6E6; /* Light gray borders */
+        padding: 0.5rem;
+        text-align: center;
+    }
+
+    th {
+        background: #1A237E; /* Darker navy for table headers */
+        color: #F68B1F; /* Orange for header text */
+    }
+
+    .ticker {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        background: rgba(0, 0, 0, 0.7);
+        color: #E6E6E6; /* Light gray for ticker text */
+        font-size: 1rem;
+        padding: 0.5rem 0;
+        overflow: hidden;
+        white-space: nowrap;
+    }
+
+    .ticker-content {
+        display: inline-block;
+        padding-left: 100%;
+        animation: scroll 120s linear infinite;
+        color: #E6E6E6;
+    }
+
+    .bottom-right {
+        position: fixed;
+        bottom: 2.5rem;
+        right: 0.5rem;
+        color: #E6E6E6; /* Light gray for clock/weather */
+        font-size: 1.2rem;
+        text-shadow: 1px 1px 2px #000;
+        opacity: 0.5;
+    }
+
+    .bottom-right span {
+        display: block;
+    }
+
+    .logo {
+        position: fixed;
+        bottom: 2.2rem;
+        left: 0.5rem;
+        width: 100px;
+        height: 100px;
+        opacity: 0.5;
+        box-shadow: 0 0 5px #E6E6E6, 0 0 10px #66B2E4, 1px 1px 2px #000;
+        object-fit: contain;
+    }
+
+    .modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.7);
+        z-index: 100;
+    }
+
+    .modal-content {
+        background: #1A237E; /* Darker navy for modal background */
+        color: #E6E6E6; /* Light gray for modal text */
+        margin: 15% auto;
+        padding: 1rem;
+        border: 2px solid #66B2E4; /* Light blue border */
+        width: 80%;
+        max-width: 500px;
+        border-radius: 8px;
+        text-align: center;
+    }
+
+    .modal-content input, .modal-content select {
+        padding: 0.5rem;
+        margin: 0.5rem;
+        font-size: 1.2rem;
+        background: #E6E6E6; /* Light gray input background */
+        color: #000;
+        border: none;
+        border-radius: 4px;
+    }
+
+    .modal-content button {
+        padding: 0.5rem 1rem;
+        margin: 0.5rem;
+        font-size: 1.2rem;
+        background: #F68B1F; /* Orange for modal buttons */
+        color: #000;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+    }
+
+    .modal-content select option:disabled {
+        background: #555;
+        color: #999;
+    }
+
+    .spectator-hidden { display: none; }
+    .track-marshall-only { display: none; }
+    .track-marshall-visible { display: block; }
+    .track-marshall-password { display: none; }
+
+    .spectator-indicator, .marshall-indicator {
+        position: fixed;
+        bottom: 5rem;
+        right: 0.5rem;
+        color: #E6E6E6; /* Light gray for indicators */
+        font-size: 1.2rem;
+        text-shadow: 1px 1px 2px #000;
+        opacity: 0.5;
+    }
+
+    .tab-buttons {
+        display: flex;
+        justify-content: space-around;
+        margin-bottom: 1rem;
+    }
+
+    .tab-button {
+        background: #1A237E; /* Darker navy for tab buttons */
+        color: #E6E6E6; /* Light gray text */
+        padding: 0.5rem 1rem;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+    }
+
+    .tab-button.active {
+        background: #F68B1F; /* Orange for active tab */
+        color: #000;
+    }
+
+    .tab-content {
+        display: none;
+        padding: 6px 12px;
+    }
+
+    .tab-content.active {
+        display: block;
+    }
+
+    .tab {
+        overflow: hidden;
+        border-bottom: 1px solid #E6E6E6; /* Light gray tab border */
+    }
+
+    .tablinks {
+        background-color: #1A237E; /* Darker navy for tab links */
+        float: left;
+        border: none;
+        outline: none;
+        cursor: pointer;
+        padding: 14px 16px;
+        transition: 0.3s;
+        color: #E6E6E6; /* Light gray text */
+    }
+
+    .tablinks:hover {
+        background-color: #2634B2; /* Slightly lighter navy on hover */
+    }
+
+    .tablinks.active {
+        background-color: #F68B1F; /* Orange for active tab */
+        color: #000;
+    }
+
+    .debug-logs {
+        max-height: 200px;
+        overflow-y: auto;
+        border: 1px solid #E6E6E6; /* Light gray border */
+        padding: 0.5rem;
+        background: #1A237E; /* Darker navy background */
+    }
+
+    @keyframes scroll {
+        0% { transform: translateX(0); }
+        100% { transform: translateX(-100%); }
+    }
+
+    @keyframes pulseYellow {
+        0% { box-shadow: 0 0 0 0 #ffff80; transform: scale(1); }
+        100% { box-shadow: 0 0 15px 7px rgba(255, 255, 128, 0.7); transform: scale(1.05); }
+    }
+
+    @keyframes pulseRed {
+        0% { box-shadow: 0 0 0 0 #ff8080; transform: scale(1); }
+        100% { box-shadow: 0 0 15px 7px rgba(255, 128, 128, 0.7); transform: scale(1.05); }
+    }
+
+    @keyframes pulseBlue {
+        0% { box-shadow: 0 0 0 0 #8080ff; transform: scale(1); }
+        100% { box-shadow: 0 0 15px 7px rgba(128, 128, 255, 0.7); transform: scale(1.05); }
+    }
+
+    @keyframes pulseGold {
+        0% { box-shadow: 0 0 0 0 #ffd700; background-color: transparent; transform: scale(1); }
+        50% { background-color: #ffd700; }
+        100% { box-shadow: 0 0 30px 15px rgba(255, 215, 0, 0.7); background-color: transparent; transform: scale(1.1); }
+    }
+
+    @keyframes pulseGo {
+        0% { opacity: 1; text-shadow: 0 0 10px #F68B1F; transform: scale(1); } /* Orange shadow */
+        40% { opacity: 0.5; text-shadow: 0 0 30px #F68B1F; transform: scale(1.3); }
+        80% { opacity: 1; text-shadow: 0 0 10px #F68B1F; transform: scale(1); }
+        100% { opacity: 0; transform: translateX(-100%); }
+    }
+
+    /* TV info elements hidden by default for players */
+    .tv-info {
+        display: none;
+    }
+
+    /* Show TV info for spectators and Marshall */
+    .spectator-visible .tv-info,
+    .marshall-visible .tv-info {
+        display: block;
+    }
+
+    @media (max-width: 1280px) {
+        h1 { font-size: 3rem; }
+        .lane { padding: 0.5rem; }
+        h2 { font-size: 2rem; }
+        p { font-size: 1.2rem; }
+        button { padding: 0.8rem 1.5rem; font-size: 1.2rem; }
+        table { font-size: 1rem; }
+        .status { font-size: 1.5rem; }
+        .status.go { font-size: 2rem; }
+        .ticker { font-size: 0.8rem; }
+        .bottom-right { font-size: 1rem; }
+        .logo { width: 80px; height: 80px; }
+    }
+</style>
+
+</head>
+
+<body>
+		<div class="container">
+			<h1>Takhomasak Speedway</h1>
+			<p class="status" id="raceStatus">Race: Not Started</p>
+			
+			<div class="lanes">
+		<div id="yellowLane" class="lane yellow">
+			<h2 id="yellowTitle">Yellow Lane</h2>
+			<p>Current Lap: <span id="yellowCurrent">1</span></p>
+			<p>Last Lap: <span id="yellowLast">--:--.---</span></p>
+			<p>Best Lap: <span id="yellowBest">--:--.---</span></p>
+			<button class="lap-btn track-marshall-only" onclick="sendCommand('y')">Trigger Lap</button>
+			<button class="kick-btn track-marshall-only" data-lane="yellow" onclick="kickDriver('yellow')">Kick Driver</button>
+			<button class="stats-btn" onclick="showStats('yellow')">View Stats</button>
+			<table>
+				<thead>
+					<tr>
+						<th>Lap</th>
+						<th>Time</th>
+					</tr>
+				</thead>
+				<tbody id="yellowHistory"></tbody>
+			</table>
+		</div>
+		<div id="redLane" class="lane red">
+			<h2 id="redTitle">Red Lane</h2>
+			<p>Current Lap: <span id="redCurrent">1</span></p>
+			<p>Last Lap: <span id="redLast">--:--.---</span></p>
+			<p>Best Lap: <span id="redBest">--:--.---</span></p>
+			<button class="lap-btn track-marshall-only" onclick="sendCommand('r')">Trigger Lap</button>
+			<button class="kick-btn track-marshall-only" data-lane="red" onclick="kickDriver('red')">Kick Driver</button>
+			<button class="stats-btn" onclick="showStats('red')">View Stats</button>
+			<table>
+				<thead>
+					<tr>
+						<th>Lap</th>
+						<th>Time</th>
+					</tr>
+				</thead>
+				<tbody id="redHistory"></tbody>
+			</table>
+		</div>
+		<div id="blueLane" class="lane blue">
+			<h2 id="blueTitle">Blue Lane</h2>
+			<p>Current Lap: <span id="blueCurrent">1</span></p>
+			<p>Last Lap: <span id="blueLast">--:--.---</span></p>
+			<p>Best Lap: <span id="blueBest">--:--.---</span></p>
+			<button class="lap-btn track-marshall-only" onclick="sendCommand('b')">Trigger Lap</button>
+			<button class="kick-btn track-marshall-only" data-lane="blue" onclick="kickDriver('blue')">Kick Driver</button>
+			<button class="stats-btn" onclick="showStats('blue')">View Stats</button>
+			<table>
+				<thead>
+					<tr>
+						<th>Lap</th>
+						<th>Time</th>
+					</tr>
+				</thead>
+				<tbody id="blueHistory"></tbody>
+			</table>
+		</div>
+
+        <div>
+            <button class="start" onclick="sendCommand('start')">Start Race</button>
+            <button class="reset" onclick="sendCommand('reset')">Reset Race</button>
+            <button class="stats-btn" onclick="logout()">Logout</button>
+            <button class="settings-btn track-marshall-only" onclick="showSettingsDebugModal()">Settings & Debug</button>
+        </div>
+    </div>
+    <div class="ticker tv-info">
+        <span class="ticker-content" id="tickerContent">Loading sports news...</span>
+    </div>
+    <div class="bottom-right tv-info">
+        <span id="clock">Loading time...</span>
+        <span id="weather">Loading weather...</span>
+    </div>
+    <img src="/qrcode_dkm.png" class="logo tv-info" alt="QR Code to Webserver">
+    <div id="loginModal" class="modal">
+        <div class="modal-content">
+            <h2>Login to Takhomasak Speedway</h2>
+            <input type="text" id="username" placeholder="Enter Username" maxlength="20" oninput="togglePasswordField()">
+            <input type="password" id="password" class="track-marshall-password" placeholder="Enter Password (Track Marshall only)">
+            <input type="number" id="carNumber" placeholder="Car Number (1-99)" min="1" max="99">
+            <select id="carColor">
+                <option value="Red">Red</option>
+                <option value="Blue">Blue</option>
+                <option value="Yellow">Yellow</option>
+                <option value="Green">Green</option>
+                <option value="Purple">Purple</option>
+                <option value="Orange">Orange</option>
+                <option value="Pink">Pink</option>
+                <option value="Cyan">Cyan</option>
+                <option value="White">White</option>
+                <option value="Black">Black</option>
+                <option value="red-to-black">Red to Black Gradient</option>
+                <option value="blue-to-white">Blue to White Gradient</option>
+                <option value="yellow-to-black">Yellow to Black Gradient</option>
+                <option value="green-to-blue">Green to Blue Gradient</option>
+                <option value="purple-to-pink">Purple to Pink Gradient</option>
+                <option value="gulf-blue-to-orange">Gulf Blue to Orange Gradient</option>
+                <option value="rainbow">Rainbow Gradient</option>
+            </select>
+            <select id="lane">
+                <option value="Red">Red Lane</option>
+                <option value="Yellow">Yellow Lane</option>
+                <option value="Blue">Blue Lane</option>
+                <option value="Spectator">Spectator (View Only)</option>
+            </select>
+            <button onclick="login()">Login</button>
+        </div>
+    </div>
+
+<div id="settingsDebugModal" class="modal">
+    <div class="modal-content">
+        <span class="close">×</span>
+        <h2>Settings & Debug</h2>
+        <div class="tab">
+            <button class="tablinks" id="settingsTab">Settings</button>
+            <button class="tablinks" id="debugTab">Debug</button>
+        </div>
+        <div id="settingsContent" class="tabcontent">
+            <h3>Race Settings</h3>
+            <form id="settingsForm">
+                <label for="raceDuration">Race Duration (seconds):</label>
+                <input type="number" id="raceDuration" name="raceDuration"><br>
+                <label for="countdownTime">Countdown Time (seconds):</label>
+                <input type="number" id="countdownTime" name="countdownTime"><br>
+                <button type="button" id="saveSettingsBtn">Save Settings</button>
+            </form>
+        </div>
+        <div id="debugContent" class="tabcontent" style="display: none;">
+            <h3>Lap Adjustments</h3>
+            <div>
+                <button type="button" class="adjust-lap-btn" data-lane="yellow" data-adjustment="increment">Yellow +1 Lap</button>
+                <button type="button" class="adjust-lap-btn" data-lane="yellow" data-adjustment="decrement">Yellow -1 Lap</button>
+            </div>
+            <div>
+                <button type="button" class="adjust-lap-btn" data-lane="red" data-adjustment="increment">Red +1 Lap</button>
+                <button type="button" class="adjust-lap-btn" data-lane="red" data-adjustment="decrement">Red -1 Lap</button>
+            </div>
+            <div>
+                <button type="button" class="adjust-lap-btn" data-lane="blue" data-adjustment="increment">Blue +1 Lap</button>
+                <button type="button" class="adjust-lap-btn" data-lane="blue" data-adjustment="decrement">Blue -1 Lap</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    console.log('Script loaded');
+    let ws;
+    let prevLaps = { yellow: 0, red: 0, blue: 0 };
+    let currentUser = null;
+    let currentRole = null;
+    const gradientMap = {
+        'red-to-black': 'linear-gradient(to right, #f00, #000)',
+        'blue-to-white': 'linear-gradient(to right, #00f, #fff)',
+        'yellow-to-black': 'linear-gradient(to right, #ff0, #000)',
+        'green-to-blue': 'linear-gradient(to right, #0f0, #00f)',
+        'purple-to-pink': 'linear-gradient(to right, #800080, #ff69b4)',
+        'gulf-blue-to-orange': 'linear-gradient(to right, #66B2E4, #F68B1F)',
+        'rainbow': 'linear-gradient(to right, #ff0000, #ff9900, #33cc33, #3399ff, #cc33cc)'
+    };
+
+    function toggleSpectatorFields() {
+        const lane = document.getElementById('lane').value;
+        const carNumber = document.getElementById('carNumber');
+        const carColor = document.getElementById('carColor');
+        if (lane === 'Spectator') {
+            carNumber.disabled = true;
+            carColor.disabled = true;
+            carNumber.value = '';
+            carColor.value = 'Red';
+        } else {
+            carNumber.disabled = false;
+            carColor.disabled = false;
+        }
+    }
+
+    function togglePasswordField() {
+        const username = document.getElementById('username').value.trim().toLowerCase();
+        const passwordField = document.getElementById('password');
+        if (username === 'marshall') {
+            console.log('Showing password field for Track Marshall');
+            passwordField.style.display = 'block';
+        } else {
+            console.log('Hiding password field for non-marshall user');
+            passwordField.style.display = 'none';
+            passwordField.value = '';
+        }
+    }
+
+    function showTrackMarshallControls() {
+        console.log('showTrackMarshallControls called, currentRole:', currentRole);
+        document.body.classList.remove('spectator-visible', 'marshall-visible');
+        const existingIndicator = document.querySelector('.marshall-indicator, .spectator-indicator');
+        if (existingIndicator) existingIndicator.remove();
+        if (currentRole === 'marshall') {
+            console.log('Showing Track Marshall controls');
+            document.querySelectorAll('.track-marshall-only').forEach(btn => btn.style.display = 'inline-block');
+            document.querySelectorAll('.start, .reset, .stats-btn').forEach(btn => btn.classList.remove('spectator-hidden'));
+            document.body.classList.add('marshall-visible');
+            const indicator = document.createElement('div');
+            indicator.className = 'marshall-indicator';
+            indicator.innerText = 'Track Marshall Mode';
+            document.body.appendChild(indicator);
+        } else if (currentRole === 'spectator') {
+            console.log('Showing Spectator controls');
+            document.querySelectorAll('.start, .reset, .lap-btn, .stats-btn, .settings-btn, .kick-btn').forEach(btn => {
+                btn.classList.add('spectator-hidden');
+                btn.disabled = true;
+            });
+            document.body.classList.add('spectator-visible');
+            const indicator = document.createElement('div');
+            indicator.className = 'spectator-indicator';
+            document.body.appendChild(indicator);
+        } else {
+            console.log('Showing Player controls');
+            document.querySelectorAll('.track-marshall-only').forEach(btn => btn.style.display = 'none');
+            document.querySelectorAll('.start, .reset, .stats-btn').forEach(btn => btn.classList.remove('spectator-hidden'));
+        }
+    }
+
+    function connectWebSocket() {
+        ws = new WebSocket('ws://' + window.location.hostname + '/ws');
+        ws.onopen = function() {
+            console.log('WebSocket connected');
+        };
+        ws.onmessage = function(event) {
+            try {
+                console.log('WebSocket data:', event.data);
+                const data = JSON.parse(event.data);
+                const statusText = 'Race: ' + data.raceStatus;
+                document.getElementById('raceStatus').innerText = statusText;
+                document.getElementById('raceStatus').className = 'status ' + 
+                    (data.raceStatus === 'Running' ? 'running' :
+                    data.raceStatus === 'Not Started' ? 'stopped' :
+                    data.raceStatus === 'GO!' ? 'go' : 'countdown' + data.raceStatus);
+                document.getElementById('yellowCurrent').innerText = data.yellow.current;
+                document.getElementById('yellowLast').innerText = data.yellow.last;
+                document.getElementById('yellowBest').innerText = data.yellow.best;
+                document.getElementById('redCurrent').innerText = data.red.current;
+                document.getElementById('redLast').innerText = data.red.last;
+                document.getElementById('redBest').innerText = data.red.best;
+                document.getElementById('blueCurrent').innerText = data.blue.current;
+                document.getElementById('blueLast').innerText = data.blue.last;
+                document.getElementById('blueBest').innerText = data.blue.best;
+                document.getElementById('yellowTitle').innerText = data.yellow.username ? 
+                    `${data.yellow.username} - ${data.yellow.carNumber}` : 'Yellow Lane';
+                document.getElementById('redTitle').innerText = data.red.username ? 
+                    `${data.red.username} - ${data.red.carNumber}` : 'Red Lane';
+                document.getElementById('blueTitle').innerText = data.blue.username ? 
+                    `${data.blue.username} - ${data.blue.carNumber}` : 'Blue Lane';
+                document.getElementById('yellowLane').style.background = data.yellow.carColor.includes('-to-') || 
+                    data.yellow.carColor === 'rainbow' ? gradientMap[data.yellow.carColor] : 
+                    (data.yellow.carColor ? data.yellow.carColor.toLowerCase() : '#ff0');
+                document.getElementById('redLane').style.background = data.red.carColor.includes('-to-') || 
+                    data.red.carColor === 'rainbow' ? gradientMap[data.red.carColor] : 
+                    (data.red.carColor ? data.red.carColor.toLowerCase() : '#f00');
+                document.getElementById('blueLane').style.background = data.blue.carColor.includes('-to-') || 
+                    data.blue.carColor === 'rainbow' ? gradientMap[data.blue.carColor] : 
+                    (data.blue.carColor ? data.blue.carColor.toLowerCase() : '#00f');
+                document.getElementById('yellowLane').style.color = 
+                    data.yellow.carColor === 'White' || data.yellow.carColor === 'blue-to-white' ? '#000' : '#fff';
+                document.getElementById('redLane').style.color = 
+                    data.red.carColor === 'White' || data.red.carColor === 'blue-to-white' ? '#000' : '#fff';
+                document.getElementById('blueLane').style.color = 
+                    data.blue.carColor === 'White' || data.blue.carColor === 'blue-to-white' ? '#000' : '#fff';
+
+                function updateHistory(lane, history, elementId) {
+                    let html = '';
+                    for (let i = 0; i < history.length; i++) {
+                        html += `<tr><td>${history.length - i}</td><td>${history[i]}</td></tr>`;
+                    }
+                    document.getElementById(elementId).innerHTML = html;
+                }
+                updateHistory('yellow', data.yellow.history, 'yellowHistory');
+                updateHistory('red', data.red.history, 'redHistory');
+                updateHistory('blue', data.blue.history, 'blueHistory');
+
+                function triggerAnimation(laneId, laps, last, best, prevLapsCount) {
+                    const lane = document.getElementById(laneId + 'Lane');
+                    if (laps > prevLapsCount && last !== '--:--.---') {
+                        if (last === best && last !== '--:--.---') {
+                            lane.classList.add('best-lap-animation');
+                        } else {
+                            lane.classList.add('lap-animation');
+                        }
+                        setTimeout(() => {
+                            lane.classList.remove('lap-animation', 'best-lap-animation');
+                        }, 500);
+                    }
+                    return laps;
+                }
+                prevLaps.yellow = triggerAnimation('yellow', data.yellow.laps, data.yellow.last, data.yellow.best, prevLaps.yellow);
+                prevLaps.red = triggerAnimation('red', data.red.laps, data.red.last, data.red.best, prevLaps.red);
+                prevLaps.blue = triggerAnimation('blue', data.blue.laps, data.blue.last, data.blue.best, prevLaps.blue);
+            } catch (e) {
+                console.error('WebSocket data error:', e);
+            }
+        };
+        ws.onclose = function() {
+            console.log('WebSocket closed. Reconnecting...');
+            setTimeout(connectWebSocket, 5000);
+        };
+        ws.onerror = function(error) {
+            console.error('WebSocket connection error:', error);
+        };
+    }
+
+    connectWebSocket();
+
+    function sendCommand(cmd) {
+        console.log('Sending command:', cmd, 'by user:', currentUser);
+        fetch('/command?cmd=' + cmd + '&username=' + encodeURIComponent(currentUser))
+            .then(response => response.text())
+            .then(data => console.log('Command response:', data))
+            .catch(error => console.error('Command error:', error));
+    }
+
+    function kickDriver(lane) {
+        console.log('kickDriver called, lane:', lane, 'currentUser:', currentUser);
+        if (currentRole !== 'marshall') {
+            console.log('Kick driver blocked: User is not Track Marshall');
+            alert('Only Track Marshall can kick drivers');
+            return;
+        }
+        if (!confirm(`Are you sure you want to kick the driver from the ${lane} lane?`)) {
+            console.log('Kick driver cancelled by user');
+            return;
+        }
+        fetch('/kickDriver', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `username=${encodeURIComponent(currentUser)}&lane=${encodeURIComponent(lane)}`
+        })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('HTTP ' + response.status);
+                }
+                return response.text();
+            })
+            .then(data => {
+                console.log('Kick driver successful:', data);
+                alert(`Driver kicked from ${lane} lane`);
+            })
+            .catch(error => {
+                console.error('Kick driver error:', error);
+                alert('Failed to kick driver: ' + error.message);
+            });
+    }
+
+    function showLoginModal() {
+        fetch('/lanes')
+            .then(response => response.json())
+            .then(data => {
+                const laneSelect = document.getElementById('lane');
+                Array.from(laneSelect.options).forEach(option => {
+                    if (option.value !== 'Spectator') {
+                        option.disabled = data[option.value.toLowerCase()] === 'taken';
+                    } else {
+                        option.disabled = false;
+                    }
+                });
+                document.getElementById('loginModal').style.display = 'block';
+                toggleSpectatorFields();
+                togglePasswordField();
+            })
+            .catch(error => {
+                console.error('Error fetching lane statuses:', error);
+                document.getElementById('loginModal').style.display = 'block';
+                toggleSpectatorFields();
+                togglePasswordField();
+            });
+    }
+
+    function login() {
+        const username = document.getElementById('username').value.trim();
+        const password = document.getElementById('password').value || '';
+        let carNumber = document.getElementById('carNumber').value;
+        let carColor = document.getElementById('carColor').value;
+        const lane = document.getElementById('lane').value;
+        console.log('Login attempt:', { username, lane, password: username.toLowerCase() === 'marshall' ? '[hidden]' : '' });
+
+        if (lane === 'Spectator') {
+            if (!username) {
+                alert('Please enter a username');
+                return;
+            }
+            carNumber = '0';
+            carColor = 'None';
+        } else if (!username || !carNumber || !carColor || !lane) {
+            alert('Please fill all fields');
+            return;
+        }
+
+        if (username.toLowerCase() === 'marshall' && password === '') {
+            alert('Please enter a password for Track Marshall');
+            return;
+        }
+
+        fetch('/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}&carNumber=${carNumber}&carColor=${carColor}&lane=${lane}`
+        })
+            .then(response => {
+                if (!response.ok) {
+                    return response.text().then(text => { throw new Error(text); });
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log('Login success:', data);
+                currentUser = username;
+                currentRole = data.role;
+                localStorage.setItem('sessionId', data.sessionId);
+                sessionStorage.setItem('currentUser', username);
+                sessionStorage.setItem('currentRole', data.role);
+                sessionStorage.setItem('carNumber', carNumber);
+                sessionStorage.setItem('carColor', carColor);
+                sessionStorage.setItem('lane', lane);
+                document.getElementById('loginModal').style.display = 'none';
+                showTrackMarshallControls();
+                if (document.getElementById('settingsDebugModal')) {
+                    document.getElementById('settingsDebugModal').style.display = 'none';
+                }
+            })
+            .catch(error => {
+                console.error('Login error:', error);
+                alert('Login failed: ' + error.message);
+            });
+    }
+
+    function logout() {
+        if (currentUser) {
+            console.log('Logout attempt for user:', currentUser);
+            const sessionId = localStorage.getItem('sessionId');
+            fetch('/logout', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: `username=${encodeURIComponent(currentUser)}&sessionId=${encodeURIComponent(sessionId)}`
+            })
+                .then(response => {
+                    if (!response.ok) {
+                        console.error('Logout failed: HTTP', response.status);
+                        throw new Error('HTTP ' + response.status);
+                    }
+                    return response.text();
+                })
+                .then(data => {
+                    console.log('Logout response:', data);
+                    currentUser = null;
+                    currentRole = null;
+                    localStorage.removeItem('sessionId');
+                    sessionStorage.clear();
+                    showLoginModal();
+                })
+                .catch(error => {
+                    console.error('Logout error:', error);
+                    alert('Logout failed: ' + error.message);
+                });
+        } else {
+            console.log('Logout attempted but no currentUser');
+            alert('No user logged in');
+        }
+    }
+
+    function showStats(lane) {
+        console.log('showStats called for lane:', lane, 'currentUser:', currentUser);
+        const username = document.getElementById(lane + 'Title').innerText.split(' - ')[0];
+        if (!username || username === lane.charAt(0).toUpperCase() + lane.slice(1) + ' Lane') {
+            alert('No driver in this lane');
+            return;
+        }
+        fetch(`/stats?username=${encodeURIComponent(username)}`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('HTTP ' + response.status);
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log('Stats fetched:', data);
+                let stats = `Stats for ${data.username}:\n`;
+                stats += `Car Number: ${data.carNumber}\n`;
+                stats += `Car Color: ${data.carColor}\n`;
+                stats += `Best Lap: ${data.bestLapTime}\n`;
+                stats += `Lap History:\n`;
+                data.lapHistory.forEach((lap, index) => {
+                    stats += `Lap ${index + 1}: ${lap}\n`;
+                });
+                alert(stats);
+            })
+            .catch(error => {
+                console.error('Stats fetch error:', error);
+                alert('Failed to fetch stats: ' + error.message);
+            });
+    }
+
+    function showSettingsDebugModal() {
+        console.log('showSettingsDebugModal called, currentUser:', currentUser, 'currentRole:', currentRole);
+        if (currentRole !== 'marshall') {
+            console.log('Settings modal blocked: User is not Track Marshall');
+            return;
+        }
+        const modal = document.getElementById('settingsDebugModal');
+        if (!modal) {
+            console.error('Settings modal element not found');
+            return;
+        }
+        modal.style.display = 'block';
+        const raceDuration = document.getElementById('raceDuration');
+        const countdownTime = document.getElementById('countdownTime');
+        if (raceDuration) raceDuration.value = '';
+        else console.error('raceDuration input not found');
+        if (countdownTime) countdownTime.value = '';
+        else console.error('countdownTime input not found');
+        showTab('settings');
+        console.log('Settings modal displayed');
+    }
+
+    function closeSettingsDebugModal() {
+        console.log('closeSettingsDebugModal called');
+        const modal = document.getElementById('settingsDebugModal');
+        if (modal) {
+            modal.style.display = 'none';
+            console.log('Settings modal closed');
+        } else {
+            console.error('Settings modal element not found');
+        }
+    }
+
+    function showTab(tabName) {
+        console.log('showTab called, tab:', tabName);
+        const settingsContent = document.getElementById('settingsContent');
+        const debugContent = document.getElementById('debugContent');
+        const settingsTab = document.getElementById('settingsTab');
+        const debugTab = document.getElementById('debugTab');
+
+        if (!settingsContent || !debugContent || !settingsTab || !debugTab) {
+            console.error('Tab elements not found:', { settingsContent, debugContent, settingsTab, debugTab });
+            return;
+        }
+
+        if (tabName === 'settings') {
+            settingsContent.classList.add('active');
+            debugContent.classList.remove('active');
+            settingsTab.classList.add('active');
+            debugTab.classList.remove('active');
+        } else if (tabName === 'debug') {
+            debugContent.classList.add('active');
+            settingsContent.classList.remove('active');
+            debugTab.classList.add('active');
+            settingsTab.classList.remove('active');
+        }
+        console.log('Switched to tab:', tabName);
+    }
+
+    function saveSettings() {
+        console.log('saveSettings called, currentUser:', currentUser);
+        if (currentRole !== 'marshall') {
+            console.log('Save settings blocked: User is not Track Marshall');
+            return;
+        }
+        const raceDuration = document.getElementById('raceDuration')?.value || '';
+        const countdownTime = document.getElementById('countdownTime')?.value || '';
+        console.log('Saving settings:', { raceDuration, countdownTime });
+        fetch('/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `username=${encodeURIComponent(currentUser)}&raceDuration=${encodeURIComponent(raceDuration)}&countdownTime=${encodeURIComponent(countdownTime)}`
+        })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('HTTP ' + response.status);
+                }
+                return response.text();
+            })
+            .then(data => {
+                console.log('Settings saved:', data);
+                closeSettingsDebugModal();
+            })
+            .catch(error => {
+                console.error('Save settings error:', error);
+                alert('Failed to save settings: ' + error.message);
+            });
+    }
+
+    function adjustLapTime(lane, adjustment) {
+        console.log('adjustLapTime called, lane:', lane, 'adjustment:', adjustment, 'currentUser:', currentUser);
+        if (currentRole !== 'marshall') {
+            console.log('Adjust lap time blocked: User is not Track Marshall');
+            return;
+        }
+        fetch('/adjustLap', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `username=${encodeURIComponent(currentUser)}&lane=${encodeURIComponent(lane)}&adjustment=${encodeURIComponent(adjustment)}`
+        })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('HTTP ' + response.status);
+                }
+                return response.text();
+            })
+            .then(data => {
+                console.log('Lap adjustment successful:', data);
+            })
+            .catch(error => {
+                console.error('Lap adjustment error:', error);
+                alert('Failed to adjust lap: ' + error.message);
+            });
+    }
+
+    window.onload = function() {
+        const sessionId = localStorage.getItem('sessionId');
+        console.log('window.onload: sessionId=', sessionId);
+
+        if (window.autoLoginSpectator || new URLSearchParams(window.location.search).get('spectator') === 'auto') {
+            console.log('Auto-login detected for spectator:', window.autoLoginSpectator || 'URL-based');
+            currentUser = window.autoLoginSpectator || 'spectator_auto_' + Date.now();
+            currentRole = 'spectator';
+            localStorage.setItem('sessionId', 'spectator_' + Date.now());
+            sessionStorage.setItem('currentUser', currentUser);
+            sessionStorage.setItem('currentRole', currentRole);
+            sessionStorage.setItem('carNumber', '0');
+            sessionStorage.setItem('carColor', 'None');
+            sessionStorage.setItem('lane', 'Spectator');
+            showTrackMarshallControls();
+            connectWebSocket();
+            return;
+        }
+
+        if (sessionId) {
+            console.log('Validating session with sessionId:', sessionId);
+            fetch(`/validate-session?sessionId=${encodeURIComponent(sessionId)}`)
+                .then(response => {
+                    if (!response.ok) {
+                        console.error('Session validation failed: HTTP', response.status);
+                        throw new Error('Session invalid: HTTP ' + response.status);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    console.log('Session restored: user=', data.username, 'role=', data.role);
+                    currentUser = data.username;
+                    currentRole = data.role;
+                    sessionStorage.setItem('currentUser', currentUser);
+                    sessionStorage.setItem('currentRole', currentRole);
+                    sessionStorage.setItem('carNumber', data.carNumber);
+                    sessionStorage.setItem('carColor', data.carColor);
+                    sessionStorage.setItem('lane', data.lane);
+                    document.getElementById('username').value = currentUser;
+                    document.getElementById('carNumber').value = data.carNumber;
+                    document.getElementById('carColor').value = data.carColor;
+                    document.getElementById('lane').value = data.lane;
+                    toggleSpectatorFields();
+                    showTrackMarshallControls();
+                    connectWebSocket();
+                    if (document.getElementById('settingsDebugModal')) {
+                        document.getElementById('settingsDebugModal').style.display = 'none';
+                    }
+                })
+                .catch(error => {
+                    console.error('Session validation error:', error);
+                    localStorage.removeItem('sessionId');
+                    showLoginModal();
+                });
+        } else {
+            console.log('No stored session, showing login modal');
+            showLoginModal();
+        }
+
+        // Initialize settings button listener
+        const settingsBtn = document.querySelector('.settings-btn');
+        if (settingsBtn) {
+            settingsBtn.removeEventListener('click', showSettingsDebugModal);
+            settingsBtn.addEventListener('click', showSettingsDebugModal);
+            console.log('Settings button listener initialized');
+        } else {
+            console.error('Settings button not found');
+        }
+
+        // Initialize modal close button
+        const closeBtn = document.querySelector('#settingsDebugModal .close');
+        if (closeBtn) {
+            closeBtn.removeEventListener('click', closeSettingsDebugModal);
+            closeBtn.addEventListener('click', closeSettingsDebugModal);
+            console.log('Modal close button listener initialized');
+        } else {
+            console.error('Modal close button not found');
+        }
+
+        // Initialize save settings button
+        const saveBtn = document.getElementById('saveSettingsBtn');
+        if (saveBtn) {
+            saveBtn.removeEventListener('click', saveSettings);
+            saveBtn.addEventListener('click', saveSettings);
+            console.log('Save settings button listener initialized');
+        } else {
+            console.error('Save settings button not found');
+        }
+
+        // Initialize lap adjustment buttons
+        document.querySelectorAll('.adjust-lap-btn').forEach(btn => {
+            btn.removeEventListener('click', handleLapAdjustment);
+            btn.addEventListener('click', handleLapAdjustment);
+            console.log('Lap adjustment button listener initialized for:', btn.dataset.lane, btn.dataset.adjustment);
+        });
+
+        // Initialize kick driver buttons
+        document.querySelectorAll('.kick-btn').forEach(btn => {
+            btn.removeEventListener('click', handleKickDriver);
+            btn.addEventListener('click', handleKickDriver);
+            console.log('Kick driver button listener initialized for:', btn.dataset.lane);
+        });
+
+        // Initialize tab buttons
+        const settingsTab = document.getElementById('settingsTab');
+        const debugTab = document.getElementById('debugTab');
+        if (settingsTab) {
+            settingsTab.removeEventListener('click', () => showTab('settings'));
+            settingsTab.addEventListener('click', () => showTab('settings'));
+            console.log('Settings tab button listener initialized');
+        } else {
+            console.error('Settings tab button not found');
+        }
+        if (debugTab) {
+            debugTab.removeEventListener('click', () => showTab('debug'));
+            debugTab.addEventListener('click', () => showTab('debug'));
+            console.log('Debug tab button listener initialized');
+        } else {
+            console.error('Debug tab button not found');
+        }
+
+        function handleLapAdjustment(event) {
+            const lane = event.target.dataset.lane;
+            const adjustment = event.target.dataset.adjustment;
+            adjustLapTime(lane, adjustment);
+        }
+
+        function handleKickDriver(event) {
+            const lane = event.target.dataset.lane;
+            kickDriver(lane);
+        }
+    };
+
+    window.addEventListener('beforeunload', function() {
+        console.log('beforeunload event triggered, no logout action taken');
+    });
+
+    document.getElementById('lane').addEventListener('change', toggleSpectatorFields);
+
+    function updateTicker() {
+        const feeds = [
+            'https://www.espn.com/espn/rss/news',
+            'https://www.espn.com/espn/rss/nascar/news',
+            'https://rss.cnn.com/rss/cnn_latest.rss'
+        ];
+        let headlines = [];
+        function fetchFeed(url) {
+            return fetch('https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent(url))
+                .then(response => {
+                    if (!response.ok) {
+                        console.error('RSS fetch failed for', url, ': HTTP', response.status);
+                        throw new Error('HTTP ' + response.status);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (!data.items) {
+                        console.error('RSS parse error for', url, ': No items');
+                        return [];
+                    }
+                    return data.items.slice(0, 15).map(item => item.title);
+                })
+                .catch(error => {
+                    console.error('RSS fetch error for', url, ':', error);
+                    return [];
+                });
+        }
+        Promise.all(feeds.map(fetchFeed))
+            .then(results => {
+                headlines = results.flat().slice(0, 45).join(' | ');
+                document.getElementById('tickerContent').innerText = headlines || 'No news available';
+            })
+            .catch(error => {
+                console.error('RSS combine error:', error);
+                document.getElementById('tickerContent').innerText = 'No news available';
+            });
+    }
+    updateTicker();
+    setInterval(updateTicker, 300000);
+
+    function updateClock() {
+        try {
+            const clockElement = document.getElementById('clock');
+            if (!clockElement) {
+                console.error('Clock element not found');
+                return;
+            }
+            const now = new Date();
+            const hours = now.getHours();
+            const minutes = now.getMinutes();
+            const ampm = hours >= 12 ? 'PM' : 'AM';
+            const hours12 = hours % 12 || 12;
+            const minutesPadded = minutes < 10 ? '0' + minutes : minutes;
+            clockElement.innerText = `${hours12}:${minutesPadded} ${ampm} EDT`;
+            console.log('Clock updated:', clockElement.innerText);
+        } catch (e) {
+            console.error('updateClock error:', e);
+            document.getElementById('clock').innerText = 'Time unavailable';
+        }
+    }
+    updateClock();
+    setInterval(updateClock, 1000);
+
+    function updateWeather() {
+        const apiKey = 'a9180d26f4019e0edfdf1659686e9286';
+        const city = 'Cincinnati';
+        fetch('https://api.openweathermap.org/data/2.5/weather?q=' + city + '&appid=' + apiKey + '&units=imperial')
+            .then(response => {
+                if (!response.ok) {
+                    console.error('Weather fetch failed: HTTP', response.status);
+                    throw new Error('HTTP ' + response.status);
+                }
+                return response.json();
+            })
+            .then(data => {
+                try {
+                    const temp = Math.round(data.main.temp);
+                    const condition = data.weather[0].main;
+                    document.getElementById('weather').innerText = city + ', OH: ' + temp + '°F, ' + condition;
+                } catch (e) {
+                    console.error('Weather parse error:', e);
+                    document.getElementById('weather').innerText = 'Weather unavailable';
+                }
+            })
+            .catch(error => {
+                console.error('Weather fetch error:', error);
+                document.getElementById('weather').innerText = 'Weather unavailable';
+            });
+    }
+    updateWeather();
+    setInterval(updateWeather, 600000);
+
+    setInterval(() => {
+        fetch('/data')
+            .then(response => {
+                if (!response.ok) {
+                    console.error('Poll fetch error: HTTP', response.status);
+                    throw new Error('HTTP ' + response.status);
+                }
+                return response.json();
+            })
+            .then(data => {
+                try {
+                    const statusText = 'Race: ' + data.raceStatus;
+                    document.getElementById('raceStatus').innerText = statusText;
+                    document.getElementById('raceStatus').className = 'status ' + 
+                        (data.raceStatus === 'Running' ? 'running' :
+                        data.raceStatus === 'Not Started' ? 'stopped' :
+                        data.raceStatus === 'GO!' ? 'go' : 'countdown' + data.raceStatus);
+                    document.getElementById('yellowCurrent').innerText = data.yellow.current;
+                    document.getElementById('yellowLast').innerText = data.yellow.last;
+                    document.getElementById('yellowBest').innerText = data.yellow.best;
+                    document.getElementById('redCurrent').innerText = data.red.current;
+                    document.getElementById('redLast').innerText = data.red.last;
+                    document.getElementById('redBest').innerText = data.red.best;
+                    document.getElementById('blueCurrent').innerText = data.blue.current;
+                    document.getElementById('blueLast').innerText = data.blue.last;
+                    document.getElementById('blueBest').innerText = data.blue.best;
+                    document.getElementById('yellowTitle').innerText = data.yellow.username ? 
+                        `${data.yellow.username} - ${data.yellow.carNumber}` : 'Yellow Lane';
+                    document.getElementById('redTitle').innerText = data.red.username ? 
+                        `${data.red.username} - ${data.red.carNumber}` : 'Red Lane';
+                    document.getElementById('blueTitle').innerText = data.blue.username ? 
+                        `${data.blue.username} - ${data.blue.carNumber}` : 'Blue Lane';
+                    document.getElementById('yellowLane').style.background = data.yellow.carColor.includes('-to-') || 
+                        data.yellow.carColor === 'rainbow' ? gradientMap[data.yellow.carColor] : 
+                        (data.yellow.carColor ? data.yellow.carColor.toLowerCase() : '#ff0');
+                    document.getElementById('redLane').style.background = data.red.carColor.includes('-to-') || 
+                        data.red.carColor === 'rainbow' ? gradientMap[data.red.carColor] : 
+                        (data.red.carColor ? data.red.carColor.toLowerCase() : '#f00');
+                    document.getElementById('blueLane').style.background = data.blue.carColor.includes('-to-') || 
+                        data.blue.carColor === 'rainbow' ? gradientMap[data.blue.carColor] : 
+                        (data.blue.carColor ? data.blue.carColor.toLowerCase() : '#00f');
+                    document.getElementById('yellowLane').style.color = 
+                        data.yellow.carColor === 'White' || data.yellow.carColor === 'blue-to-white' ? '#000' : '#fff';
+                    document.getElementById('redLane').style.color = 
+                        data.red.carColor === 'White' || data.red.carColor === 'blue-to-white' ? '#000' : '#fff';
+                    document.getElementById('blueLane').style.color = 
+                        data.blue.carColor === 'White' || data.blue.carColor === 'blue-to-white' ? '#000' : '#fff';
+
+                    function updateHistory(lane, history, elementId) {
+                        let html = '';
+                        for (let i = 0; i < history.length; i++) {
+                            html += `<tr><td>${history.length - i}</td><td>${history[i]}</td></tr>`;
+                        }
+                        document.getElementById(elementId).innerHTML = html;
+                    }
+                    updateHistory('yellow', data.yellow.history, 'yellowHistory');
+                    updateHistory('red', data.red.history, 'redHistory');
+                    updateHistory('blue', data.blue.history, 'blueHistory');
+
+                    function triggerAnimation(laneId, laps, last, best, prevLapsCount) {
+                        const lane = document.getElementById(laneId + 'Lane');
+                        if (laps > prevLapsCount && last !== '--:--.---') {
+                            if (last === best && last !== '--:--.---') {
+                                lane.classList.add('best-lap-animation');
+                            } else {
+                                lane.classList.add('lap-animation');
+                            }
+                            setTimeout(() => {
+                                lane.classList.remove('lap-animation', 'best-lap-animation');
+                            }, 500);
+                        }
+                        return laps;
+                    }
+                    prevLaps.yellow = triggerAnimation('yellow', data.yellow.laps, data.yellow.last, data.yellow.best, prevLaps.yellow);
+                    prevLaps.red = triggerAnimation('red', data.red.laps, data.red.last, data.red.best, prevLaps.red);
+                    prevLaps.blue = triggerAnimation('blue', data.blue.laps, data.blue.last, data.blue.best, prevLaps.blue);
+                } catch (e) {
+                    console.error('Poll data error:', e);
+                }
+            })
+            .catch(error => console.error('Poll fetch error:', error));
+    }, 1000);
+</script>
+
+</body>
+</html>

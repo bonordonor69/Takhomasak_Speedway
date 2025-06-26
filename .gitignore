@@ -1,0 +1,30 @@
+# Arduino build artifacts
+*.bin
+*.elf
+*.hex
+*.map
+build/
+
+# IDE files
+.vscode/
+.idea/
+*.suo
+*.user
+
+# Temporary files
+*~
+*.tmp
+*.bak
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Arduino CLI cache
+.arduino15/
+
+# Backup directories (migrate to git branches instead)
+*_copy_*/
+*_WORKING*/
+*_backup*/
+*_old*/
