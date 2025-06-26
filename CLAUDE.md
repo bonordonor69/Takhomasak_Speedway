@@ -155,3 +155,50 @@ Takhomasak_Speedway/
 - `/qrcode_dkm.png`: QR code for easy mobile access
 
 When working with this codebase, prioritize safety and reliability as this is used for live racing events. Test all changes thoroughly, especially sensor calibration and race timing logic.
+
+## Development Environment Setup (Completed)
+
+### Arduino CLI Configuration
+- **Location**: `/mnt/c/Users/tlaws/Documents/Arduino/Takhomasak_Speedway/bin/arduino-cli`
+- **Usage**: `export PATH="/mnt/c/Users/tlaws/Documents/Arduino/Takhomasak_Speedway/bin:$PATH"`
+- **Board**: `esp32:esp32:esp32`
+- **Compile**: `arduino-cli compile --fqbn esp32:esp32:esp32 sketch.ino`
+- **Upload**: `arduino-cli upload -p /dev/ttyUSB0 --fqbn esp32:esp32:esp32 sketch.ino`
+
+### Installed Libraries
+- ✅ **ArduinoJson** 7.4.2 - JSON handling
+- ✅ **Adafruit_VL53L0X** 1.2.4 - LIDAR sensors (with dependencies)
+- ✅ **ESP Async WebServer** 3.7.8 - Web server
+- ✅ **AsyncTCP** 1.1.4 - TCP async support
+- ✅ **LEDMatrixDriver** 0.2.2 - For future MAX7219 implementation
+
+### Hardware Status
+- ✅ **VL53L0X Sensors**: Working, tested
+- ✅ **ESP32 Web Server**: Working, tested  
+- ❌ **MAX7219 Displays**: Not connected, code disabled
+- ❌ **Control LEDs**: Not connected (Red/Yellow/Blue lane LEDs)
+- ❌ **Manual Buttons**: Not connected (Red/Yellow/Blue/Start buttons)
+
+### Git Repository
+- **Status**: Local repository initialized (private)
+- **Security**: WiFi credentials in code (consider environment variables)
+- **Branches**: Currently on `master`
+- **Remote**: None (local only, networking info safe)
+
+### Current Code Issues
+1. **AsyncWebServer Warning**: Minor compatibility warning with AsyncTCP, doesn't affect functionality
+2. **MAX7219 Integration**: Disabled until hardware connected, will need library replacement
+3. **WiFi Credentials**: Hardcoded in source (lines in main sketch)
+
+### Next Session TODO
+1. **Connect Hardware**: MAX7219 displays, LEDs, buttons
+2. **Library Integration**: Proper MAX7219 library with 7-segment support
+3. **Security**: Move WiFi credentials to config file or environment variables
+4. **Feature Development**: Ready for race timing enhancements
+
+### Development Notes
+- Core timing and sensor functionality working
+- Web interface operational
+- Session management functional  
+- Race data persistence working
+- Ready for feature additions and hardware completion
