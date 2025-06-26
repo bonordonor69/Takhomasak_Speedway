@@ -84,7 +84,7 @@
  */
 
 //Included Packages
-#include <LedController.hpp>
+// #include <LedController.hpp> // Disabled for now - MAX7219s not connected
 #include <WiFi.h>
 #include <ESPAsyncWebServer.h>
 #include <AsyncTCP.h>
@@ -223,10 +223,10 @@ Adafruit_VL53L0X blueSensor = Adafruit_VL53L0X();
 // Distance threshold for detecting a car (in mm; adjust based on testing)
 const int DETECTION_THRESHOLD = 99; // ~3 inches (76 mm), slightly less to account for car height
 
-// MAX7219 setup
-LedControl lcRed = LedControl(MAX7219_DIN, MAX7219_CLK, MAX7219_CS_RED, 1);
-LedControl lcYellow = LedControl(MAX7219_DIN, MAX7219_CLK, MAX7219_CS_YELLOW, 1);
-LedControl lcBlue = LedControl(MAX7219_DIN, MAX7219_CLK, MAX7219_CS_BLUE, 1);
+// MAX7219 setup - Disabled (displays not connected)
+// LedController<1,1> lcRed = LedController<1,1>();
+// LedController<1,1> lcYellow = LedController<1,1>();
+// LedController<1,1> lcBlue = LedController<1,1>();
 
 // Webserver and WebSocket
 AsyncWebServer server(80);
@@ -239,11 +239,11 @@ portMUX_TYPE raceMux = portMUX_INITIALIZER_UNLOCKED;
 // Function prototypes
 void startRace();
 void resetRace();
-void handleLap(Lane* lane, String laneName, int ledPin, LedControl* lc);
+void handleLap(Lane* lane, String laneName, int ledPin, void* lc);
 void sendRaceData();
 String formatTime(unsigned long ms);
-void updateDisplay(Lane* lane, LedControl* lc, String laneName);
-void updateDisplayBlink(Lane* lane, LedControl* lc, String laneName);
+void updateDisplay(Lane* lane, void* lc, String laneName);
+void updateDisplayBlink(Lane* lane, void* lc, String laneName);
 void updateLED(Lane* lane, int ledPin);
 void loadUsers();
 void saveUsers();
@@ -307,16 +307,8 @@ void setup() {
   blueSensor.setAddress(BLUE_VL53L0X_ADDRESS);
   Serial.println("Blue VL53L0X initialized at address 0x32");
 
-  // Initialize MAX7219 displays
-  lcRed.shutdown(0, false);
-  lcRed.setIntensity(0, displayBrightness);
-  lcRed.clearDisplay(0);
-  lcYellow.shutdown(0, false);
-  lcYellow.setIntensity(0, displayBrightness);
-  lcYellow.clearDisplay(0);
-  lcBlue.shutdown(0, false);
-  lcBlue.setIntensity(0, displayBrightness);
-  lcBlue.clearDisplay(0);
+  // Initialize MAX7219 displays - DISABLED (not connected)
+  Serial.println("MAX7219 displays disabled - hardware not connected");
   Serial.println("MAX7219 displays initialized");
 
   // Mount LittleFS
@@ -450,17 +442,17 @@ if ((cmd == "r" || cmd == "y" || cmd == "b") && sessions[username].role != "mars
     addDebugLog("Race reset by " + username);
     request->send(200, "text/plain", "Race reset");
   } else if (cmd == "r" && raceStarted) {
-    handleLap(&redLane, "Red", RED_LED_PIN, &lcRed);
+    handleLap(&redLane, "Red", RED_LED_PIN, nullptr);
     addDebugLog("Red lap triggered by " + username);
     sendRaceData();
     request->send(200, "text/plain", "Red lap triggered");
   } else if (cmd == "y" && raceStarted) {
-    handleLap(&yellowLane, "Yellow", YELLOW_LED_PIN, &lcYellow);
+    handleLap(&yellowLane, "Yellow", YELLOW_LED_PIN, nullptr);
     addDebugLog("Yellow lap triggered by " + username);
     sendRaceData();
     request->send(200, "text/plain", "Yellow lap triggered");
   } else if (cmd == "b" && raceStarted) {
-    handleLap(&blueLane, "Blue", BLUE_LED_PIN, &lcBlue);
+    handleLap(&blueLane, "Blue", BLUE_LED_PIN, nullptr);
     addDebugLog("Blue lap triggered by " + username);
     sendRaceData();
     request->send(200, "text/plain", "Blue lap triggered");
@@ -778,9 +770,9 @@ if ((cmd == "r" || cmd == "y" || cmd == "b") && sessions[username].role != "mars
       displayBrightness = request->getParam("displayBrightness", true)->value().toInt();
       displayBrightness = constrain(displayBrightness, 0, 15);
       portENTER_CRITICAL(&timerMux);
-      lcRed.setIntensity(0, displayBrightness);
-      lcYellow.setIntensity(0, displayBrightness);
-      lcBlue.setIntensity(0, displayBrightness);
+      // lcRed.setIntensity(0, displayBrightness); // MAX7219 disabled
+      // lcYellow.setIntensity(0, displayBrightness); // MAX7219 disabled
+      // lcBlue.setIntensity(0, displayBrightness); // MAX7219 disabled
       portEXIT_CRITICAL(&timerMux);
     }
     addDebugLog("Settings updated by " + username + ": maxLapCount=" + String(maxLapCount) + ", minLapTime=" + String(minLapTime) + ", displayBrightness=" + String(displayBrightness));
@@ -1054,7 +1046,13 @@ server.on("/kickDriver", HTTP_POST, [](AsyncWebServerRequest *request) {
 
   // Final initialization
   loadUsers();
-  esp_task_wdt_init(10, true); //Watchdog Timer, 10 seconds (reduced for testing)
+  // Watchdog Timer - Updated for ESP32 Arduino Core 3.x
+  esp_task_wdt_config_t wdt_config = {
+    .timeout_ms = 10000,
+    .idle_core_mask = (1 << portNUM_PROCESSORS) - 1,
+    .trigger_panic = true
+  };
+  esp_task_wdt_init(&wdt_config);
   esp_task_wdt_add(NULL);
   Serial.println("Setup complete");
 }
@@ -1234,13 +1232,13 @@ void startRace() {
     
     // Update displays with WDT resets between each display
     Serial.println("Updating displays...");
-    updateDisplay(&redLane, &lcRed, "Red");
+    updateDisplay(&redLane, nullptr, "Red");
     esp_task_wdt_reset();
     
-    updateDisplay(&yellowLane, &lcYellow, "Yellow");
+    updateDisplay(&yellowLane, nullptr, "Yellow");
     esp_task_wdt_reset();
     
-    updateDisplay(&blueLane, &lcBlue, "Blue");
+    updateDisplay(&blueLane, nullptr, "Blue");
     esp_task_wdt_reset();
     
     Serial.println("Calling sendRaceData, Free Heap: " + String(ESP.getFreeHeap()));
@@ -1281,18 +1279,18 @@ void resetRace() {
     digitalWrite(YELLOW_LED_PIN, LOW);
     digitalWrite(BLUE_LED_PIN, LOW);
     portENTER_CRITICAL(&timerMux);
-    lcRed.clearDisplay(0);
-    lcYellow.clearDisplay(0);
-    lcBlue.clearDisplay(0);
+    // lcRed.clearDisplay(0); // MAX7219 disabled
+    // lcYellow.clearDisplay(0); // MAX7219 disabled
+    // lcBlue.clearDisplay(0); // MAX7219 disabled
     portEXIT_CRITICAL(&timerMux);
-    updateDisplay(&redLane, &lcRed, "Red");
-    updateDisplay(&yellowLane, &lcYellow, "Yellow");
-    updateDisplay(&blueLane, &lcBlue, "Blue");
+    updateDisplay(&redLane, nullptr, "Red");
+    updateDisplay(&yellowLane, nullptr, "Yellow");
+    updateDisplay(&blueLane, nullptr, "Blue");
     addDebugLog("RACE RESET: All lanes reset, displays cleared");
     sendRaceData();
 }
 
-void handleLap(Lane* lane, String laneName, int ledPin, LedControl* lc) {
+void handleLap(Lane* lane, String laneName, int ledPin, void* lc) {
     unsigned long currentTime = millis();
     unsigned long lapTime;
     if (lane->lapCount == 1) {
@@ -1345,7 +1343,8 @@ void handleLap(Lane* lane, String laneName, int ledPin, LedControl* lc) {
     addDebugLog("LAP TRIGGERED: " + laneName + ": Completed Lap " + String(lane->lapCount - 1) + ", Time: " + formatTime(lane->lastLapTime) + (isBestLap ? " (NEW BEST)" : ""));
     sendRaceData();
 }
-void updateDisplay(Lane* lane, LedControl* lc, String laneName) {
+void updateDisplay(Lane* lane, void* lc, String laneName) {
+    // MAX7219 displays disabled - hardware not connected
     if (lc == nullptr) return;
     
     Serial.print("Updating display for ");
@@ -1355,10 +1354,9 @@ void updateDisplay(Lane* lane, LedControl* lc, String laneName) {
 
     // Quick critical section for display configuration only
     portENTER_CRITICAL(&timerMux);
-    lc->shutdown(0, false);
-    lc->setIntensity(0, displayBrightness);
-    lc->setScanLimit(0, 7);
-    lc->clearDisplay(0);
+    // lc->activateAllSegments(); // MAX7219 disabled
+    // lc->setIntensity(displayBrightness); // MAX7219 disabled
+    // lc->clearMatrix(); // MAX7219 disabled
     portEXIT_CRITICAL(&timerMux);
 
     if (!raceStarted) {
@@ -1373,21 +1371,21 @@ void updateDisplay(Lane* lane, LedControl* lc, String laneName) {
             // Single critical section for all digits
             portENTER_CRITICAL(&timerMux);
             for (int i = 0; i < 8; i++) {
-                lc->setDigit(0, i, 3, false);
+                // // lc->setDigit(0, i, 3, false); // MAX7219 disabled
             }
             portEXIT_CRITICAL(&timerMux);
         } else if (lane->startSequencePhase == 2) {
             Serial.println("MAX7219 " + laneName + " Updating: 22222222");
             portENTER_CRITICAL(&timerMux);
             for (int i = 0; i < 8; i++) {
-                lc->setDigit(0, i, 2, false);
+                // // lc->setDigit(0, i, 2, false); // MAX7219 disabled
             }
             portEXIT_CRITICAL(&timerMux);
         } else if (lane->startSequencePhase == 3) {
             Serial.println("MAX7219 " + laneName + " Updating: 11111111");
             portENTER_CRITICAL(&timerMux);
             for (int i = 0; i < 8; i++) {
-                lc->setDigit(0, i, 1, false);
+                // // lc->setDigit(0, i, 1, false); // MAX7219 disabled
             }
             portEXIT_CRITICAL(&timerMux);
         } else if (lane->startSequencePhase == 4) {
@@ -1400,13 +1398,13 @@ void updateDisplay(Lane* lane, LedControl* lc, String laneName) {
                 // Single critical section for all dashes
                 portENTER_CRITICAL(&timerMux);
                 for (int i = 0; i < 8; i++) {
-                    lc->setChar(0, i, '-', false);
+                    // // lc->setChar(0, i, '-', false); // MAX7219 disabled
                 }
                 portEXIT_CRITICAL(&timerMux);
             } else {
                 Serial.println("MAX7219 " + laneName + " Updating: Blank (flash)");
                 portENTER_CRITICAL(&timerMux);
-                lc->clearDisplay(0);
+                // lc->clearMatrix(); // MAX7219 disabled
                 portEXIT_CRITICAL(&timerMux);
             }
         }
@@ -1428,10 +1426,10 @@ void updateDisplay(Lane* lane, LedControl* lc, String laneName) {
         portENTER_CRITICAL(&timerMux);
         for (int i = 0; i < 8; i++) {
             if (i == 4) {
-                lc->setChar(0, 7 - i, '.', false);
+                // lc->setChar(0, 7 - i, '.', false);
             } else {
                 int digit = buffer[i < 4 ? i : i - 1] - '0';
-                lc->setDigit(0, 7 - i, digit, false);
+                // lc->setDigit(0, 7 - i, digit, false);
             }
         }
         portEXIT_CRITICAL(&timerMux);
@@ -1443,25 +1441,25 @@ void updateDisplay(Lane* lane, LedControl* lc, String laneName) {
         
         // Single critical section for lap count display
         portENTER_CRITICAL(&timerMux);
-        lc->setChar(0, 7, 'L', false);
-        lc->setChar(0, 6, 'A', false);
-        lc->setChar(0, 5, 'P', false);
-        lc->setChar(0, 4, ' ', false);
+        // lc->setChar(0, 7, 'L', false);
+        // lc->setChar(0, 6, 'A', false);
+        // lc->setChar(0, 5, 'P', false);
+        // lc->setChar(0, 4, ' ', false);
         int lap = lane->lapCount;
         if (lap > 9999) lap = 9999;
         int thousands = (lap / 1000) % 10;
         int hundreds = (lap / 100) % 10;
         int tens = (lap / 10) % 10;
         int ones = lap % 10;
-        lc->setDigit(0, 3, thousands, false);
-        lc->setDigit(0, 2, hundreds, false);
-        lc->setDigit(0, 1, tens, false);
-        lc->setDigit(0, 0, ones, false);
+        // lc->setDigit(0, 3, thousands, false);
+        // lc->setDigit(0, 2, hundreds, false);
+        // lc->setDigit(0, 1, tens, false);
+        // lc->setDigit(0, 0, ones, false);
         portEXIT_CRITICAL(&timerMux);
     }
 }
 
-void updateDisplayBlink(Lane* lane, LedControl* lc, String laneName) {
+void updateDisplayBlink(Lane* lane, void* lc, String laneName) {
     if (lc == nullptr || lane->pulseState != 2) return;
     unsigned long elapsed = millis() - lane->pulseStartTime;
     if (elapsed < 1200) {
@@ -1469,9 +1467,9 @@ void updateDisplayBlink(Lane* lane, LedControl* lc, String laneName) {
         int phase = elapsed % 400;
         portENTER_CRITICAL(&timerMux);
         if (phase < 200) {
-            lc->shutdown(0, false);
-            lc->setIntensity(0, 2);
-            lc->setScanLimit(0, 7);
+            // lc->activateAllSegments(); // MAX7219 disabled
+            // lc->setIntensity(2); // MAX7219 disabled
+            // setScanLimit not needed in LedController
             unsigned long ms = lane->lastLapTime;
             unsigned long minutes = ms / 60000;
             ms %= 60000;
@@ -1481,15 +1479,15 @@ void updateDisplayBlink(Lane* lane, LedControl* lc, String laneName) {
             snprintf(buffer, 9, "%02lu%02lu%03lu", minutes, seconds, millisecs);
             for (int i = 0; i < 8; i++) {
                 if (i == 4) {
-                    lc->setChar(0, 7 - i, '.', false);
+                    // lc->setChar(0, 7 - i, '.', false);
                 } else {
                     int digit = buffer[i < 4 ? i : i - 1] - '0';
-                    lc->setDigit(0, 7 - i, digit, false);
+                    // lc->setDigit(0, 7 - i, digit, false);
                 }
                 delay(10);
             }
         } else {
-            lc->clearDisplay(0);
+            // lc->clearMatrix(); // MAX7219 disabled
         }
         portEXIT_CRITICAL(&timerMux);
         if (phase >= 399 && cycle < 2) {
@@ -1497,9 +1495,9 @@ void updateDisplayBlink(Lane* lane, LedControl* lc, String laneName) {
         }
     } else if (millis() - lane->displayTimeStart < 5000) {
         portENTER_CRITICAL(&timerMux);
-        lc->shutdown(0, false);
-        lc->setIntensity(0, 2);
-        lc->setScanLimit(0, 7);
+        // lc->activateAllSegments(); // MAX7219 disabled
+        // lc->setIntensity(2); // MAX7219 disabled
+        // setScanLimit not needed in LedController
         unsigned long ms = lane->lastLapTime;
         unsigned long minutes = ms / 60000;
         ms %= 60000;
@@ -1509,10 +1507,10 @@ void updateDisplayBlink(Lane* lane, LedControl* lc, String laneName) {
         snprintf(buffer, 9, "%02lu%02lu%03lu", minutes, seconds, millisecs);
         for (int i = 0; i < 8; i++) {
             if (i == 4) {
-                lc->setChar(0, 7 - i, '.', false);
+                // lc->setChar(0, 7 - i, '.', false);
             } else {
                 int digit = buffer[i < 4 ? i : i - 1] - '0';
-                lc->setDigit(0, 7 - i, digit, false);
+                // lc->setDigit(0, 7 - i, digit, false);
             }
             delay(10);
         }
@@ -1566,7 +1564,7 @@ void handleSensors(unsigned long currentTime) {
     if (redDistance >= 0 && redDistance < detectionThreshold && raceStarted && lapCountingEnabled && yellowLane.startSequencePhase == 0) {
         unsigned long lapTime = (redLane.lapCount == 1) ? (currentTime - startTime) : (currentTime - redLane.prevLapTimestamp);
         if (lapTime >= minLapTime) {
-            handleLap(&redLane, "Red", RED_LED_PIN, &lcRed);
+            handleLap(&redLane, "Red", RED_LED_PIN, nullptr);
         }
     }
     lastRedDistance = redDistance;
@@ -1576,7 +1574,7 @@ void handleSensors(unsigned long currentTime) {
     if (yellowDistance >= 0 && yellowDistance < detectionThreshold && raceStarted && lapCountingEnabled && yellowLane.startSequencePhase == 0) {
         unsigned long lapTime = (yellowLane.lapCount == 1) ? (currentTime - startTime) : (currentTime - yellowLane.prevLapTimestamp);
         if (lapTime >= minLapTime) {
-            handleLap(&yellowLane, "Yellow", YELLOW_LED_PIN, &lcYellow);
+            handleLap(&yellowLane, "Yellow", YELLOW_LED_PIN, nullptr);
         }
     }
     lastYellowDistance = yellowDistance;
@@ -1586,7 +1584,7 @@ void handleSensors(unsigned long currentTime) {
     if (blueDistance >= 0 && blueDistance < detectionThreshold && raceStarted && lapCountingEnabled && yellowLane.startSequencePhase == 0) {
         unsigned long lapTime = (blueLane.lapCount == 1) ? (currentTime - startTime) : (currentTime - blueLane.prevLapTimestamp);
         if (lapTime >= minLapTime) {
-            handleLap(&blueLane, "Blue", BLUE_LED_PIN, &lcBlue);
+            handleLap(&blueLane, "Blue", BLUE_LED_PIN, nullptr);
         }
     }
     lastBlueDistance = blueDistance;
@@ -1594,9 +1592,9 @@ void handleSensors(unsigned long currentTime) {
     updateLED(&redLane, RED_LED_PIN);
     updateLED(&yellowLane, YELLOW_LED_PIN);
     updateLED(&blueLane, BLUE_LED_PIN);
-    updateDisplayBlink(&redLane, &lcRed, "Red");
-    updateDisplayBlink(&yellowLane, &lcYellow, "Yellow");
-    updateDisplayBlink(&blueLane, &lcBlue, "Blue");
+    updateDisplayBlink(&redLane, nullptr, "Red");
+    updateDisplayBlink(&yellowLane, nullptr, "Yellow");
+    updateDisplayBlink(&blueLane, nullptr, "Blue");
 
     unsigned long handleSensorsEndTime = millis();
     loopExecutionTime = handleSensorsEndTime - currentTime;
@@ -1625,9 +1623,9 @@ void checkRaceStatus(unsigned long currentTime) {
                 blueLane.startSequencePhase = 0;
             }
             portEXIT_CRITICAL(&raceMux);
-            updateDisplay(&redLane, &lcRed, "Red");
-            updateDisplay(&yellowLane, &lcYellow, "Yellow");
-            updateDisplay(&blueLane, &lcBlue, "Blue");
+            updateDisplay(&redLane, nullptr, "Red");
+            updateDisplay(&yellowLane, nullptr, "Yellow");
+            updateDisplay(&blueLane, nullptr, "Blue");
             sendRaceData();
         }
     }
@@ -1639,9 +1637,9 @@ void checkRaceStatus(unsigned long currentTime) {
         digitalWrite(RED_LED_PIN, LOW);
         digitalWrite(YELLOW_LED_PIN, LOW);
         digitalWrite(BLUE_LED_PIN, LOW);
-        updateDisplay(&redLane, &lcRed, "Red");
-        updateDisplay(&yellowLane, &lcYellow, "Yellow");
-        updateDisplay(&blueLane, &lcBlue, "Blue");
+        updateDisplay(&redLane, nullptr, "Red");
+        updateDisplay(&yellowLane, nullptr, "Yellow");
+        updateDisplay(&blueLane, nullptr, "Blue");
         sendRaceData();
     }
 }
