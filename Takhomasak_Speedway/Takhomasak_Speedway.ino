@@ -1342,7 +1342,13 @@ void handleLap(Lane* lane, String laneName, int ledPin, void* lc) {
         updateDisplay(lane, lc, laneName);
     }
     addDebugLog("LAP TRIGGERED: " + laneName + ": Completed Lap " + String(lane->lapCount - 1) + ", Time: " + formatTime(lane->lastLapTime) + (isBestLap ? " (NEW BEST)" : ""));
-    sendRaceData();
+    
+    // Prevent heap crash by checking available memory before sendRaceData()
+    if (ESP.getFreeHeap() > 8192) {
+        sendRaceData();
+    } else {
+        Serial.println("WARNING: Low heap (" + String(ESP.getFreeHeap()) + " bytes), skipping sendRaceData");
+    }
 }
 void updateDisplay(Lane* lane, void* lc, String laneName) {
     // MAX7219 displays disabled - hardware not connected
@@ -1754,15 +1760,19 @@ if (currentTime - lastSessionCheck >= SESSION_CHECK_INTERVAL) {
 
         // Only log sessions that are close to timeout or expired (reduce spam)
         if (diff > (SESSION_TIMEOUT / 2)) {
-            String userType = (username == "marshall") ? "Marshall" : "Unknown";
-            for (int i = 0; i < spectatorCount; i++) {
-                if (spectators[i] == username) {
-                    userType = "Spectator";
-                    break;
+            String userType = "Unknown";
+            if (username == "marshall") {
+                userType = "Marshall";
+            } else {
+                for (int i = 0; i < spectatorCount; i++) {
+                    if (spectators[i] == username) {
+                        userType = "Spectator";
+                        break;
+                    }
                 }
-            }
-            if (redLane.username == username || yellowLane.username == username || blueLane.username == username) {
-                userType = "Player";
+                if (redLane.username == username || yellowLane.username == username || blueLane.username == username) {
+                    userType = "Player";
+                }
             }
             Serial.println("DEBUG: Session " + username + " (" + userType + ") age: " + String(diff / 1000) + "s (timeout at " + String(SESSION_TIMEOUT / 1000) + "s)");
         }
