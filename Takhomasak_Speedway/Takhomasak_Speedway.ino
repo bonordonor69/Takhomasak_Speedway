@@ -154,7 +154,7 @@ struct Session {
 // Global user and session storage
 std::map<String, User> users;
 std::map<String, Session> sessions;
-const unsigned long SESSION_TIMEOUT = 180 * 60 * 1000; // 180 minutes
+const unsigned long SESSION_TIMEOUT = 60000; // 60 seconds for testing, revert to 180*60*1000 (180 minutes) after testing
 const String MARSHALL_USERNAME = "marshall";
 const String MARSHALL_PASSWORD = "track2025";
 
@@ -1046,13 +1046,8 @@ server.on("/kickDriver", HTTP_POST, [](AsyncWebServerRequest *request) {
 
   // Final initialization
   loadUsers();
-  // Watchdog Timer - Updated for ESP32 Arduino Core 3.x
-  esp_task_wdt_config_t wdt_config = {
-    .timeout_ms = 10000,
-    .idle_core_mask = (1 << portNUM_PROCESSORS) - 1,
-    .trigger_panic = true
-  };
-  esp_task_wdt_init(&wdt_config);
+  // Watchdog Timer - ESP32 Arduino Core 2.x compatible
+  esp_task_wdt_init(10, true); // 10 seconds, panic on timeout
   esp_task_wdt_add(NULL);
   Serial.println("Setup complete");
 }
@@ -1657,9 +1652,71 @@ void updateWebSocketClients() {
     }
 }
 
+void handleButtons() {
+  static unsigned long lastButtonCheck = 0;
+  unsigned long currentTime = millis();
+  if (currentTime - lastButtonCheck < 50) return; // Debounce at 50ms
+  lastButtonCheck = currentTime;
+
+  // Start/Reset Button (GPIO 33)
+  static int lastStartResetState = HIGH;
+  static unsigned long lastStartResetTrigger = 0;
+  int startResetState = digitalRead(START_RESET_BUTTON_PIN);
+  if (lastStartResetState == HIGH && startResetState == LOW && currentTime - lastStartResetTrigger > 200) {
+    lastStartResetTrigger = currentTime;
+    if (raceStarted) {
+      resetRace();
+      addDebugLog("Race reset via start/reset button");
+      Serial.println("DEBUG: Start/Reset button triggered reset");
+    } else {
+      startRace();
+      addDebugLog("Race started via start/reset button");
+      Serial.println("DEBUG: Start/Reset button triggered start");
+    }
+  }
+  lastStartResetState = startResetState;
+
+  // Red Lane Button (GPIO 25)
+  static int lastRedButtonState = HIGH;
+  static unsigned long lastRedTrigger = 0;
+  int redButtonState = digitalRead(RED_BUTTON_PIN);
+  if (lastRedButtonState == HIGH && redButtonState == LOW && currentTime - lastRedTrigger > 200 && raceStarted && redLane.startSequencePhase == 0) {
+    lastRedTrigger = currentTime;
+    handleLap(&redLane, "Red", RED_LED_PIN, nullptr);
+    addDebugLog("Red lap triggered via button");
+    Serial.println("DEBUG: Red button triggered lap");
+  }
+  lastRedButtonState = redButtonState;
+
+  // Yellow Lane Button (GPIO 27)
+  static int lastYellowButtonState = HIGH;
+  static unsigned long lastYellowTrigger = 0;
+  int yellowButtonState = digitalRead(YELLOW_BUTTON_PIN);
+  if (lastYellowButtonState == HIGH && yellowButtonState == LOW && currentTime - lastYellowTrigger > 200 && raceStarted && yellowLane.startSequencePhase == 0) {
+    lastYellowTrigger = currentTime;
+    handleLap(&yellowLane, "Yellow", YELLOW_LED_PIN, nullptr);
+    addDebugLog("Yellow lap triggered via button");
+    Serial.println("DEBUG: Yellow button triggered lap");
+  }
+  lastYellowButtonState = yellowButtonState;
+
+  // Blue Lane Button (GPIO 26)
+  static int lastBlueButtonState = HIGH;
+  static unsigned long lastBlueTrigger = 0;
+  int blueButtonState = digitalRead(BLUE_BUTTON_PIN);
+  if (lastBlueButtonState == HIGH && blueButtonState == LOW && currentTime - lastBlueTrigger > 200 && raceStarted && blueLane.startSequencePhase == 0) {
+    lastBlueTrigger = currentTime;
+    handleLap(&blueLane, "Blue", BLUE_LED_PIN, nullptr);
+    addDebugLog("Blue lap triggered via button");
+    Serial.println("DEBUG: Blue button triggered lap");
+  }
+  lastBlueButtonState = blueButtonState;
+}
+
 void loop() {
     unsigned long currentTime = millis();
     esp_task_wdt_reset();
+    handleButtons();
 
     static unsigned long lastSensorUpdate = 0;
     static unsigned long lastSessionCheck = 0;
@@ -1685,17 +1742,14 @@ if (currentTime - lastSessionCheck >= SESSION_CHECK_INTERVAL) {
     Serial.println("DEBUG: Running session cleanup - checking " + String(sessions.size()) + " sessions");
     for (auto it = sessions.begin(); it != sessions.end();) {
         unsigned long lastActive = it->second.lastActive;
-        unsigned long diff = (currentTime >= lastActive) ? (currentTime - lastActive) : (0xFFFFFFFF - lastActive + currentTime + 1);
-        
+        unsigned long diff = currentTime - lastActive; // Simpler subtraction; unsigned arithmetic handles rollover, diff < 100 check prevents underflow        
+        String sessionId = it->second.sessionId;
+        String username = sessionId.substring(0, sessionId.indexOf('_'));
+        String role = users.containsKey(username) ? users[username].role : "unknown";
+
         // Only log sessions that are close to timeout or expired (reduce spam)
         if (diff > (SESSION_TIMEOUT / 2)) {
-            Serial.print("DEBUG: Session ");
-            Serial.print(it->first);
-            Serial.print(" age: ");
-            Serial.print(diff / 1000);
-            Serial.print("s (timeout at ");
-            Serial.print(SESSION_TIMEOUT / 1000);
-            Serial.println("s)");
+            Serial.println("DEBUG: Session " + username + " (" + role + ") age: " + String(diff / 1000) + "s (timeout at " + String(SESSION_TIMEOUT / 1000) + "s)");
         }
 
         if (diff < 100) {
@@ -1704,49 +1758,45 @@ if (currentTime - lastSessionCheck >= SESSION_CHECK_INTERVAL) {
             continue;
         }
 
-        if (diff > SESSION_TIMEOUT && it->first != "marshall") {
-            String username = it->first;
-            bool isSpectator = false;
-            String logMessage = "Session timeout: ";
+        if (role != "marshall" && diff >= SESSION_TIMEOUT) {
+            String logMessage = "Session timeout: " + role + " " + username;
 
-            for (int i = 0; i < spectatorCount; i++) {
-                if (spectators[i] == username) {
-                    spectators[i] = spectators[spectatorCount - 1];
-                    spectators[spectatorCount - 1] = "";
-                    spectatorCount--;
-                    isSpectator = true;
-                    logMessage += "Spectator " + username;
-                    break;
+            // Update spectators array for spectator roles
+            if (role == "spectator") {
+                for (int i = 0; i < spectatorCount; i++) {
+                    if (spectators[i] == username) {
+                        spectators[i] = spectators[spectatorCount - 1];
+                        spectators[spectatorCount - 1] = "";
+                        spectatorCount--;
+                        break;
+                    }
                 }
             }
 
-            if (!isSpectator) {
-                if (yellowLane.username == username) {
-                    yellowLane = Lane();
-                    if (users.find(username) != users.end()) {
-                        users[username].lane = "";
-                    }
-                    logMessage += "Player " + username + " from Yellow lane";
-                } else if (redLane.username == username) {
-                    redLane = Lane();
-                    if (users.find(username) != users.end()) {
-                        users[username].lane = "";
-                    }
-                    logMessage += "Player " + username + " from Red lane";
-                } else if (blueLane.username == username) {
-                    blueLane = Lane();
-                    if (users.find(username) != users.end()) {
-                        users[username].lane = "";
-                    }
-                    logMessage += "Player " + username + " from Blue lane";
-                } else {
-                    logMessage += "Unknown user " + username;
+            // Clear lane assignments for players
+            if (yellowLane.username == username) {
+                yellowLane = Lane();
+                if (users.find(username) != users.end()) {
+                    users[username].lane = "";
                 }
+                logMessage += " from Yellow lane";
+            } else if (redLane.username == username) {
+                redLane = Lane();
+                if (users.find(username) != users.end()) {
+                    users[username].lane = "";
+                }
+                logMessage += " from Red lane";
+            } else if (blueLane.username == username) {
+                blueLane = Lane();
+                if (users.find(username) != users.end()) {
+                    users[username].lane = "";
+                }
+                logMessage += " from Blue lane";
             }
 
-            logMessage += ", sessionId: " + it->second.sessionId + ", lastActive: " + String(lastActive);
+            logMessage += ", sessionId: " + sessionId + ", lastActive: " + String(lastActive);
             addDebugLog(logMessage);
-            Serial.println(logMessage);
+            Serial.println("DEBUG: " + logMessage);
             it = sessions.erase(it);
             saveUsers();
             Serial.println("Users saved to LittleFS");
@@ -1755,5 +1805,4 @@ if (currentTime - lastSessionCheck >= SESSION_CHECK_INTERVAL) {
         }
     }
     lastSessionCheck = currentTime;
-}
 }
