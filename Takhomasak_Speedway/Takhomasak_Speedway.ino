@@ -1734,7 +1734,7 @@ void loop() {
     static unsigned long lastSessionCheck = 0;
     static bool firstRun = true;
     const unsigned long SENSOR_UPDATE_INTERVAL = 100;
-    const unsigned long SESSION_CHECK_INTERVAL = 10000; // Check sessions every 10 seconds
+    const unsigned long SESSION_CHECK_INTERVAL = 30000; // Check sessions every 30 seconds
     
     // Initialize lastSessionCheck on first run to prevent immediate session cleanup
     if (firstRun) {
@@ -1759,9 +1759,9 @@ if (currentTime - lastSessionCheck >= SESSION_CHECK_INTERVAL) {
         String username = it->first;
 
         // Only log sessions that are close to timeout or expired (reduce spam)
-        if (diff > (SESSION_TIMEOUT / 2)) {
+        if (diff > (SESSION_TIMEOUT - 10000)) { // Only log in last 10 seconds before timeout
             String userType = "Unknown";
-            if (username == "marshall") {
+            if (username.equalsIgnoreCase("marshall")) {
                 userType = "Marshall";
             } else {
                 for (int i = 0; i < spectatorCount; i++) {
@@ -1777,11 +1777,14 @@ if (currentTime - lastSessionCheck >= SESSION_CHECK_INTERVAL) {
             Serial.println("DEBUG: Session " + username + " (" + userType + ") age: " + String(diff / 1000) + "s (timeout at " + String(SESSION_TIMEOUT / 1000) + "s)");
         }
 
-        if (diff < 100) {
-            // Skip very new sessions
+        if (diff < 1000) {
+            // Skip sessions less than 1 second old
             ++it;
             continue;
         }
+        
+        // Reset watchdog during session cleanup to prevent crash
+        esp_task_wdt_reset();
 
         if (it->second.role != "marshall" && diff >= SESSION_TIMEOUT) {
             String logMessage = "Session timeout: ";
