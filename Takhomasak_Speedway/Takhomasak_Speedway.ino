@@ -1246,15 +1246,21 @@ void startRace() {
 void resetRace() {
     raceStarted = false;
     
-    // Save usernames before clearing lane data
+    // Save player settings before clearing lane data
     String redUsername = redLane.username;
+    String redCarNumber = redLane.carNumber;
+    String redCarColor = redLane.carColor;
     String yellowUsername = yellowLane.username;
+    String yellowCarNumber = yellowLane.carNumber;
+    String yellowCarColor = yellowLane.carColor;
     String blueUsername = blueLane.username;
+    String blueCarNumber = blueLane.carNumber;
+    String blueCarColor = blueLane.carColor;
     
-    // Clear lane data
-    redLane = Lane { "", "", "", 1, 0, ULONG_MAX, {}, 1, 0, 0, 0, 0, 0, 0, false, 0, 0 };
-    yellowLane = Lane { "", "", "", 1, 0, ULONG_MAX, {}, 1, 0, 0, 0, 0, 0, 0, false, 0, 0 };
-    blueLane = Lane { "", "", "", 1, 0, ULONG_MAX, {}, 1, 0, 0, 0, 0, 0, 0, false, 0, 0 };
+    // Clear lane race data but preserve player assignments
+    redLane = Lane { redUsername, redCarNumber, redCarColor, 1, 0, ULONG_MAX, {}, 1, 0, 0, 0, 0, 0, 0, false, 0, 0 };
+    yellowLane = Lane { yellowUsername, yellowCarNumber, yellowCarColor, 1, 0, ULONG_MAX, {}, 1, 0, 0, 0, 0, 0, 0, false, 0, 0 };
+    blueLane = Lane { blueUsername, blueCarNumber, blueCarColor, 1, 0, ULONG_MAX, {}, 1, 0, 0, 0, 0, 0, 0, false, 0, 0 };
     
     // Clear user lap history using saved usernames
     if (!redUsername.isEmpty()) {
@@ -1744,12 +1750,21 @@ if (currentTime - lastSessionCheck >= SESSION_CHECK_INTERVAL) {
         unsigned long lastActive = it->second.lastActive;
         unsigned long diff = currentTime - lastActive; // Simpler subtraction; unsigned arithmetic handles rollover, diff < 100 check prevents underflow        
         String sessionId = it->second.sessionId;
-        String username = sessionId.substring(0, sessionId.indexOf('_'));
-        String role = users.containsKey(username) ? users[username].role : "unknown";
+        String username = it->first;
 
         // Only log sessions that are close to timeout or expired (reduce spam)
         if (diff > (SESSION_TIMEOUT / 2)) {
-            Serial.println("DEBUG: Session " + username + " (" + role + ") age: " + String(diff / 1000) + "s (timeout at " + String(SESSION_TIMEOUT / 1000) + "s)");
+            String userType = (username == "marshall") ? "Marshall" : "Unknown";
+            for (int i = 0; i < spectatorCount; i++) {
+                if (spectators[i] == username) {
+                    userType = "Spectator";
+                    break;
+                }
+            }
+            if (redLane.username == username || yellowLane.username == username || blueLane.username == username) {
+                userType = "Player";
+            }
+            Serial.println("DEBUG: Session " + username + " (" + userType + ") age: " + String(diff / 1000) + "s (timeout at " + String(SESSION_TIMEOUT / 1000) + "s)");
         }
 
         if (diff < 100) {
@@ -1758,18 +1773,18 @@ if (currentTime - lastSessionCheck >= SESSION_CHECK_INTERVAL) {
             continue;
         }
 
-        if (role != "marshall" && diff >= SESSION_TIMEOUT) {
-            String logMessage = "Session timeout: " + role + " " + username;
-
-            // Update spectators array for spectator roles
-            if (role == "spectator") {
-                for (int i = 0; i < spectatorCount; i++) {
-                    if (spectators[i] == username) {
-                        spectators[i] = spectators[spectatorCount - 1];
-                        spectators[spectatorCount - 1] = "";
-                        spectatorCount--;
-                        break;
-                    }
+        if (it->second.role != "marshall" && diff >= SESSION_TIMEOUT) {
+            String logMessage = "Session timeout: ";
+            String userType = "Unknown";
+            
+            // Update spectators array for spectators
+            for (int i = 0; i < spectatorCount; i++) {
+                if (spectators[i] == username) {
+                    spectators[i] = spectators[spectatorCount - 1];
+                    spectators[spectatorCount - 1] = "";
+                    spectatorCount--;
+                    userType = "Spectator";
+                    break;
                 }
             }
 
@@ -1779,19 +1794,29 @@ if (currentTime - lastSessionCheck >= SESSION_CHECK_INTERVAL) {
                 if (users.find(username) != users.end()) {
                     users[username].lane = "";
                 }
-                logMessage += " from Yellow lane";
+                userType = "Player";
+                logMessage += "Player " + username + " from Yellow lane";
             } else if (redLane.username == username) {
                 redLane = Lane();
                 if (users.find(username) != users.end()) {
                     users[username].lane = "";
                 }
-                logMessage += " from Red lane";
+                userType = "Player";
+                logMessage += "Player " + username + " from Red lane";
             } else if (blueLane.username == username) {
                 blueLane = Lane();
                 if (users.find(username) != users.end()) {
                     users[username].lane = "";
                 }
-                logMessage += " from Blue lane";
+                userType = "Player";
+                logMessage += "Player " + username + " from Blue lane";
+            } else {
+                logMessage += userType + " " + username;
+            }
+
+            if (username == "marshall") {
+                userType = "Marshall";
+                logMessage = "Session timeout: Marshall " + username; // Should not occur due to condition
             }
 
             logMessage += ", sessionId: " + sessionId + ", lastActive: " + String(lastActive);
@@ -1805,4 +1830,5 @@ if (currentTime - lastSessionCheck >= SESSION_CHECK_INTERVAL) {
         }
     }
     lastSessionCheck = currentTime;
+}
 }
