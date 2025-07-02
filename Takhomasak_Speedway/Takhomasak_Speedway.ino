@@ -317,6 +317,8 @@ void setup() {
     Serial.println("An Error has occurred while mounting LittleFS. Continuing without filesystem...");
   } else {
     Serial.println("LittleFS mounted successfully");
+    printUsersJson();
+  }
     if (LittleFS.exists("/index.html")) {
       Serial.println("index.html found in LittleFS");
     } else {
@@ -1202,8 +1204,27 @@ void sendRaceData() {
     Serial.println("sendRaceData() completed");
 }
 
+void startSequence() {
+  // Flash LEDs: Red -> Yellow -> Blue, 500ms each
+  digitalWrite(RED_LED_PIN, HIGH);
+  delay(500);
+  digitalWrite(RED_LED_PIN, LOW);
+  digitalWrite(YELLOW_LED_PIN, HIGH);
+  delay(500);
+  digitalWrite(YELLOW_LED_PIN, LOW);
+  digitalWrite(BLUE_LED_PIN, HIGH);
+  delay(500);
+  digitalWrite(BLUE_LED_PIN, LOW);
+  Serial.println("DEBUG: Lightshow completed");
+}
+
 void startRace() {
-    // Reset watchdog timer before starting
+  if (raceStarted) {
+    Serial.println("DEBUG: Race already started");
+    return;
+  }
+  
+  // Reset watchdog timer before starting
     esp_task_wdt_reset();
     
     Serial.println("startRace() started, Free Heap: " + String(ESP.getFreeHeap()));
@@ -1292,64 +1313,60 @@ void resetRace() {
 }
 
 void handleLap(Lane* lane, String laneName, int ledPin, void* lc) {
-    unsigned long currentTime = millis();
-    unsigned long lapTime;
-    if (lane->lapCount == 1) {
-        lapTime = currentTime - startTime;
-    } else {
-        lapTime = currentTime - lane->prevLapTimestamp;
+    if (!lane || !raceStarted || !lapCountingEnabled || lane->startSequencePhase != 0) {
+        Serial.println("DEBUG: Lap ignored for " + laneName + ": Invalid state");
+        return;
     }
+    unsigned long currentTime = millis();
+    unsigned long lapTime = (lane->lapCount == 1) ? (currentTime - startTime) : (currentTime - lane->prevLapTimestamp);
     if (lapTime < minLapTime) {
         addDebugLog("Lap ignored for " + laneName + ": Time " + String(lapTime) + "ms below minimum " + String(minLapTime) + "ms");
         return;
     }
-    if (lane->lapCount >= 9999) {
-        addDebugLog("Lap ignored for " + laneName + ": Max lap count 9999 reached");
-        return;
-    }
-    if (maxLapCount > 0 && lane->lapCount > maxLapCount) {
-        addDebugLog("Lap ignored for " + laneName + ": Max lap count " + String(maxLapCount) + " reached");
+    if (lane->lapCount >= 9999 || (maxLapCount > 0 && lane->lapCount > maxLapCount)) {
+        addDebugLog("Lap ignored for " + laneName + ": Max lap count reached");
         return;
     }
     lane->lastLapTime = lapTime;
     lane->prevLapTimestamp = currentTime;
     if (lane->lapCount <= 50) {
-        lane->history[lane->lapCount - 1] = formatTime(lane->lastLapTime);
+        lane->history[lane->lapCount - 1] = formatTime(lapTime);
     }
     lane->lapCount++;
-    bool isBestLap = lane->lastLapTime < lane->bestLapTime && lane->lastLapTime > 0;
+    bool isBestLap = lapTime < lane->bestLapTime && lapTime > 0;
     if (isBestLap) {
         lane->bestLapTime = lapTime;
-        lane->pulseState = 2;
+        lane->pulseState = 2; // Fast pulse for best lap
         lane->flashCount = 0;
     } else {
-        lane->pulseState = 1;
+        lane->pulseState = 1; // Normal pulse
     }
     lane->pulseStartTime = currentTime;
     lane->displayLapTime = true;
     lane->displayTimeStart = currentTime;
+    updateLED(lane, ledPin); // Turn on lane-specific LED
     if (!lane->username.isEmpty()) {
-        users[lane->username].lapHistory.push_back(lane->lastLapTime);
+        users[lane->username].lapHistory.push_back(lapTime);
         if (users[lane->username].lapHistory.size() > 50) {
             users[lane->username].lapHistory.erase(users[lane->username].lapHistory.begin());
         }
         if (isBestLap) {
-            users[lane->username].bestLapTime = lane->bestLapTime;
+            users[lane->username].bestLapTime = lapTime;
         }
         saveUsers();
     }
     if (lc != nullptr) {
         updateDisplay(lane, lc, laneName);
     }
-    addDebugLog("LAP TRIGGERED: " + laneName + ": Completed Lap " + String(lane->lapCount - 1) + ", Time: " + formatTime(lane->lastLapTime) + (isBestLap ? " (NEW BEST)" : ""));
-    
-    // Prevent heap crash by checking available memory before sendRaceData()
+    addDebugLog("LAP TRIGGERED: " + laneName + ": Completed Lap " + String(lane->lapCount - 1) + ", Time: " + formatTime(lapTime) + (isBestLap ? " (NEW BEST)" : ""));
+    Serial.println("DEBUG: " + laneName + " lap triggered");
     if (ESP.getFreeHeap() > 8192) {
         sendRaceData();
     } else {
         Serial.println("WARNING: Low heap (" + String(ESP.getFreeHeap()) + " bytes), skipping sendRaceData");
     }
 }
+
 void updateDisplay(Lane* lane, void* lc, String laneName) {
     // MAX7219 displays disabled - hardware not connected
     if (lc == nullptr) return;
