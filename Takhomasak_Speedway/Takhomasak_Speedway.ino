@@ -245,10 +245,13 @@ String formatTime(unsigned long ms);
 void updateDisplay(Lane* lane, void* lc, String laneName);
 void updateDisplayBlink(Lane* lane, void* lc, String laneName);
 void updateLED(Lane* lane, int ledPin);
+void startSequence();
 void loadUsers();
 void saveUsers();
 void printUsersJson();
 void addDebugLog(String message);
+
+//Setup
 void setup() {
   esp_task_wdt_deinit();
   Serial.begin(115200);
@@ -266,6 +269,12 @@ void setup() {
   digitalWrite(RED_LED_PIN, LOW);
   digitalWrite(YELLOW_LED_PIN, LOW);
   digitalWrite(BLUE_LED_PIN, LOW);
+  if (LittleFS.begin()) {
+    Serial.println("LittleFS mounted successfully");
+    printUsersJson();
+  } else {
+    Serial.println("An Error has occurred while mounting LittleFS. Continuing without filesystem...");
+  }
 
   // Set up XSHUT pins for VL53L0X sensors
   pinMode(RED_XSHUT_PIN, OUTPUT);
@@ -1243,45 +1252,35 @@ void startRace() {
     Serial.println("DEBUG: Race already started");
     return;
   }
-  
-  // Reset watchdog timer before starting
-    esp_task_wdt_reset();
-    
-    Serial.println("startRace() started, Free Heap: " + String(ESP.getFreeHeap()));
-    
-    // Quick critical section for race state changes only
-    portENTER_CRITICAL(&raceMux);
-    raceStarted = true;
-    startTime = millis();
-    yellowLane.startSequencePhase = 1;
-    redLane.startSequencePhase = 1;
-    blueLane.startSequencePhase = 1;
-    unsigned long phaseDuration = countdownTimeSeconds > 0 ? (countdownTimeSeconds * 1000 / 4) : 1250;
-    lastPhaseChange = startTime;
-    phaseChangeInterval = phaseDuration;
-    yellowLane.startDisplayTime = startTime;
-    redLane.startDisplayTime = startTime;
-    blueLane.startDisplayTime = startTime;
-    portEXIT_CRITICAL(&raceMux);
-    
-    addDebugLog("Race started at " + String(startTime));
-    
-    // Update displays with WDT resets between each display
-    Serial.println("Updating displays...");
-    updateDisplay(&redLane, nullptr, "Red");
-    esp_task_wdt_reset();
-    
-    updateDisplay(&yellowLane, nullptr, "Yellow");
-    esp_task_wdt_reset();
-    
-    updateDisplay(&blueLane, nullptr, "Blue");
-    esp_task_wdt_reset();
-    
-    Serial.println("Calling sendRaceData, Free Heap: " + String(ESP.getFreeHeap()));
+  esp_task_wdt_reset();
+  Serial.println("startRace() started, Free Heap: " + String(ESP.getFreeHeap()));
+  portENTER_CRITICAL(&raceMux);
+  raceStarted = true;
+  startTime = millis();
+  yellowLane.startSequencePhase = 1;
+  redLane.startSequencePhase = 1;
+  blueLane.startSequencePhase = 1;
+  unsigned long phaseDuration = countdownTimeSeconds > 0 ? (countdownTimeSeconds * 1000 / 4) : 1250;
+  lastPhaseChange = startTime;
+  phaseChangeInterval = phaseDuration;
+  yellowLane.startDisplayTime = startTime;
+  redLane.startDisplayTime = startTime;
+  blueLane.startDisplayTime = startTime;
+  portEXIT_CRITICAL(&raceMux);
+  startSequence(); // Add lightshow here
+  addDebugLog("Race started at " + String(startTime));
+  Serial.println("Updating displays...");
+  updateDisplay(&redLane, nullptr, "Red"); esp_task_wdt_reset();
+  updateDisplay(&yellowLane, nullptr, "Yellow"); esp_task_wdt_reset();
+  updateDisplay(&blueLane, nullptr, "Blue"); esp_task_wdt_reset();
+  Serial.println("Calling sendRaceData, Free Heap: " + String(ESP.getFreeHeap()));
+  if (ESP.getFreeHeap() > 8192) {
     sendRaceData();
-    esp_task_wdt_reset();
-    
-    Serial.println("startRace() completed");
+  } else {
+    Serial.println("WARNING: Low heap (" + String(ESP.getFreeHeap()) + " bytes), skipping sendRaceData");
+  }
+  esp_task_wdt_reset();
+  Serial.println("startRace() completed");
 }
 
 void resetRace() {
@@ -1570,29 +1569,33 @@ void updateDisplayBlink(Lane* lane, void* lc, String laneName) {
 }
 
 void updateLED(Lane* lane, int ledPin) {
-    unsigned long currentTime = millis();
-    if (lane->pulseState == 1) {
-        if (currentTime - lane->pulseStartTime < 1000) {
-            digitalWrite(ledPin, HIGH);
-        } else {
-            digitalWrite(ledPin, LOW);
-            lane->pulseState = 0;
-        }
-    } else if (lane->pulseState == 2) {
-        unsigned long elapsed = currentTime - lane->pulseStartTime;
-        if (elapsed < 1200) {
-            int cycle = elapsed / 400;
-            int phase = elapsed % 400;
-            digitalWrite(ledPin, phase < 200 ? HIGH : LOW);
-            if (phase >= 399 && cycle < 2) {
-                lane->flashCount++;
-            }
-        } else {
-            digitalWrite(ledPin, LOW);
-            lane->pulseState = 0;
-            lane->flashCount = 0;
-        }
+  unsigned long currentTime = millis();
+  // Turn off all LEDs to prevent crosstalk
+  digitalWrite(RED_LED_PIN, LOW);
+  digitalWrite(YELLOW_LED_PIN, LOW);
+  digitalWrite(BLUE_LED_PIN, LOW);
+  if (lane->pulseState == 1) { // Normal lap
+    if (currentTime - lane->pulseStartTime < 1000) {
+      digitalWrite(ledPin, HIGH);
+    } else {
+      digitalWrite(ledPin, LOW);
+      lane->pulseState = 0;
     }
+  } else if (lane->pulseState == 2) { // Best lap
+    unsigned long elapsed = currentTime - lane->pulseStartTime;
+    if (elapsed < 1200) {
+      int cycle = elapsed / 400;
+      int phase = elapsed % 400;
+      digitalWrite(ledPin, phase < 200 ? HIGH : LOW);
+      if (phase >= 399 && cycle < 2) {
+        lane->flashCount++;
+      }
+    } else {
+      digitalWrite(ledPin, LOW);
+      lane->pulseState = 0;
+      lane->flashCount = 0;
+    }
+  }
 }
 
 void handleSensors(unsigned long currentTime) {
