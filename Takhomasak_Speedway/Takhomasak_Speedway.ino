@@ -317,8 +317,6 @@ void setup() {
     Serial.println("An Error has occurred while mounting LittleFS. Continuing without filesystem...");
   } else {
     Serial.println("LittleFS mounted successfully");
-    printUsersJson();
-  }
     if (LittleFS.exists("/index.html")) {
       Serial.println("index.html found in LittleFS");
     } else {
