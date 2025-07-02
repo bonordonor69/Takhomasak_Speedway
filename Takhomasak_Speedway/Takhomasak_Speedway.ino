@@ -247,6 +247,7 @@ void updateDisplayBlink(Lane* lane, void* lc, String laneName);
 void updateLED(Lane* lane, int ledPin);
 void loadUsers();
 void saveUsers();
+void printUsersJson();
 void addDebugLog(String message);
 void setup() {
   esp_task_wdt_deinit();
@@ -317,6 +318,7 @@ void setup() {
     Serial.println("An Error has occurred while mounting LittleFS. Continuing without filesystem...");
   } else {
     Serial.println("LittleFS mounted successfully");
+    printUsersJson();
     if (LittleFS.exists("/index.html")) {
       Serial.println("index.html found in LittleFS");
     } else {
@@ -1113,6 +1115,26 @@ void saveUsers() {
     }
     file.close();
     Serial.println("Users saved to LittleFS");
+}
+
+void printUsersJson() {
+    Serial.println("=== Current users.json contents ===");
+    File file = LittleFS.open("/users.json", "r");
+    if (!file) {
+        Serial.println("No users.json file found");
+        return;
+    }
+    Serial.println("File size: " + String(file.size()) + " bytes");
+    if (file.size() == 0) {
+        Serial.println("users.json is empty");
+        file.close();
+        return;
+    }
+    while (file.available()) {
+        Serial.write(file.read());
+    }
+    file.close();
+    Serial.println("\n=== End users.json contents ===");
 }
 
 String formatTime(unsigned long ms) {
