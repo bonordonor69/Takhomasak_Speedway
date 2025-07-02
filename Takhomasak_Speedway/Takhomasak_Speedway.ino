@@ -192,6 +192,9 @@ IPAddress subnet(255, 255, 255, 0);
 IPAddress primaryDNS(8, 8, 8, 8);
 IPAddress secondaryDNS(8, 8, 4, 4);
 
+//Validate Session
+bool validateSession(String sessionId, String username);
+
 // Pin definitions
 #define RED_SENSOR_PIN 4     // GPIO 4, now used as RED_XSHUT_PIN
 #define YELLOW_SENSOR_PIN 18 // GPIO 18, now used as YELLOW_XSHUT_PIN
@@ -258,22 +261,30 @@ void setup() {
   delay(100);
   Serial.println("Takhomasak Speedway Multi-Lane Starting...");
 
-  // Initialize pins
-  pinMode(RED_BUTTON_PIN, INPUT_PULLUP);
-  pinMode(YELLOW_BUTTON_PIN, INPUT_PULLUP);
-  pinMode(BLUE_BUTTON_PIN, INPUT_PULLUP);
-  pinMode(START_RESET_BUTTON_PIN, INPUT_PULLUP);
+  // Initialize LED pins
   pinMode(RED_LED_PIN, OUTPUT);
   pinMode(YELLOW_LED_PIN, OUTPUT);
   pinMode(BLUE_LED_PIN, OUTPUT);
   digitalWrite(RED_LED_PIN, LOW);
   digitalWrite(YELLOW_LED_PIN, LOW);
   digitalWrite(BLUE_LED_PIN, LOW);
+  Serial.println("DEBUG: LEDs initialized to OFF, voltages should be 0V");
+  // Initialize button pins
+  pinMode(RED_BUTTON_PIN, INPUT_PULLUP);
+  pinMode(YELLOW_BUTTON_PIN, INPUT_PULLUP);
+  pinMode(BLUE_BUTTON_PIN, INPUT_PULLUP);
+  pinMode(START_RESET_BUTTON_PIN, INPUT_PULLUP);
+  Serial.println("DEBUG: Buttons initialized with INPUT_PULLUP, states should be HIGH");
+  // Verify initial button states
+  Serial.println("DEBUG: Initial Red button state: " + String(digitalRead(RED_BUTTON_PIN)));
+  Serial.println("DEBUG: Initial Yellow button state: " + String(digitalRead(YELLOW_BUTTON_PIN)));
+  Serial.println("DEBUG: Initial Blue button state: " + String(digitalRead(BLUE_BUTTON_PIN)));
+  Serial.println("DEBUG: Initial Start/Reset button state: " + String(digitalRead(START_RESET_BUTTON_PIN)));
   if (LittleFS.begin()) {
     Serial.println("LittleFS mounted successfully");
     printUsersJson();
   } else {
-    Serial.println("An Error has occurred while mounting LittleFS. Continuing without filesystem...");
+    Serial.println("An Error has occurred while mounting LittleFS...");
   }
 
   // Set up XSHUT pins for VL53L0X sensors
@@ -1045,6 +1056,66 @@ server.on("/kickDriver", HTTP_POST, [](AsyncWebServerRequest *request) {
     }
   });
 
+    // WebSocket setup
+  Serial.println("Setting up WebSocket...");
+  ws.onEvent([](AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len){
+    if (type == WS_EVT_CONNECT) {
+      Serial.println("WebSocket client connected, ID: " + String(client->id()));
+      if (ESP.getFreeHeap() > 8192) {
+        sendRaceData();
+      } else {
+        Serial.println("WARNING: Low heap (" + String(ESP.getFreeHeap()) + " bytes), skipping sendRaceData");
+      }
+    } else if (type == WS_EVT_DISCONNECT) {
+      Serial.println("WebSocket client disconnected, ID: " + String(client->id()));
+    } else if (type == WS_EVT_DATA) {
+      AwsFrameInfo *info = (AwsFrameInfo*)arg;
+      if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT) {
+        data[len] = 0;
+        String message = (char*)data;
+        Serial.println("DEBUG: Received web command: " + message);
+        // Parse command and sessionId (format: "command:sessionId:username")
+        int firstColon = message.indexOf(':');
+        int secondColon = message.indexOf(':', firstColon + 1);
+        if (firstColon == -1 || secondColon == -1) {
+          Serial.println("DEBUG: Invalid command format: " + message);
+          return;
+        }
+        String command = message.substring(0, firstColon);
+        String sessionId = message.substring(firstColon + 1, secondColon);
+        String username = message.substring(secondColon + 1);
+        if (!validateSession(sessionId, username)) {
+          Serial.println("DEBUG: Command failed: Invalid session for user: " + username);
+          return;
+        }
+        if (ESP.getFreeHeap() < 8192) {
+          Serial.println("WARNING: Low heap (" + String(ESP.getFreeHeap()) + " bytes), skipping command");
+          return;
+        }
+        if (command == "start") {
+          startRace();
+          addDebugLog("Race started by " + username);
+          Serial.println("DEBUG: Race started by " + username);
+        } else if (command == "reset") {
+          resetRace();
+          addDebugLog("Race reset by " + username);
+          Serial.println("DEBUG: Race reset by " + username);
+        } else if (command == "y") {
+          handleLap(&yellowLane, "Yellow", YELLOW_LED_PIN, nullptr);
+          addDebugLog("Yellow lap triggered by " + username);
+          Serial.println("DEBUG: Yellow lap triggered by " + username);
+        } else if (command == "r") {
+          handleLap(&redLane, "Red", RED_LED_PIN, nullptr);
+          addDebugLog("Red lap triggered by " + username);
+          Serial.println("DEBUG: Red lap triggered by " + username);
+        } else if (command == "b") {
+          handleLap(&blueLane, "Blue", BLUE_LED_PIN, nullptr);
+          addDebugLog("Blue lap triggered by " + username);
+          Serial.println("DEBUG: Blue lap triggered by " + username);
+        }
+      }
+    }
+  });
   server.addHandler(&ws);
 
   // Start server
@@ -1144,6 +1215,20 @@ void printUsersJson() {
     }
     file.close();
     Serial.println("\n=== End users.json contents ===");
+}
+
+bool validateSession(String sessionId, String username) {
+    // Check if session exists for the username
+    if (sessions.find(username) == sessions.end()) {
+        return false;
+    }
+    // Check if sessionId matches
+    if (sessions[username].sessionId != sessionId) {
+        return false;
+    }
+    // Update last active time
+    sessions[username].lastActive = millis();
+    return true;
 }
 
 String formatTime(unsigned long ms) {
@@ -1570,16 +1655,18 @@ void updateDisplayBlink(Lane* lane, void* lc, String laneName) {
 
 void updateLED(Lane* lane, int ledPin) {
   unsigned long currentTime = millis();
-  // Turn off all LEDs to prevent crosstalk
+  Serial.println("DEBUG: updateLED called for pin " + String(ledPin) + ", pulseState: " + String(lane->pulseState));
   digitalWrite(RED_LED_PIN, LOW);
   digitalWrite(YELLOW_LED_PIN, LOW);
   digitalWrite(BLUE_LED_PIN, LOW);
   if (lane->pulseState == 1) { // Normal lap
     if (currentTime - lane->pulseStartTime < 1000) {
       digitalWrite(ledPin, HIGH);
+      Serial.println("DEBUG: LED " + String(ledPin) + " ON (normal lap)");
     } else {
       digitalWrite(ledPin, LOW);
       lane->pulseState = 0;
+      Serial.println("DEBUG: LED " + String(ledPin) + " OFF (normal lap end)");
     }
   } else if (lane->pulseState == 2) { // Best lap
     unsigned long elapsed = currentTime - lane->pulseStartTime;
@@ -1587,6 +1674,7 @@ void updateLED(Lane* lane, int ledPin) {
       int cycle = elapsed / 400;
       int phase = elapsed % 400;
       digitalWrite(ledPin, phase < 200 ? HIGH : LOW);
+      Serial.println("DEBUG: LED " + String(ledPin) + " " + (phase < 200 ? "ON" : "OFF") + " (best lap, cycle " + String(cycle) + ")");
       if (phase >= 399 && cycle < 2) {
         lane->flashCount++;
       }
@@ -1594,6 +1682,7 @@ void updateLED(Lane* lane, int ledPin) {
       digitalWrite(ledPin, LOW);
       lane->pulseState = 0;
       lane->flashCount = 0;
+      Serial.println("DEBUG: LED " + String(ledPin) + " OFF (best lap end)");
     }
   }
 }
@@ -1707,13 +1796,14 @@ void updateWebSocketClients() {
 void handleButtons() {
   static unsigned long lastButtonCheck = 0;
   unsigned long currentTime = millis();
-  if (currentTime - lastButtonCheck < 50) return; // Debounce at 50ms
+  if (currentTime - lastButtonCheck < 50) return; // Debounce
   lastButtonCheck = currentTime;
 
-  // Start/Reset Button (GPIO 33)
+  // Start/Reset Button
   static int lastStartResetState = HIGH;
   static unsigned long lastStartResetTrigger = 0;
   int startResetState = digitalRead(START_RESET_BUTTON_PIN);
+  Serial.println("DEBUG: Start/Reset button state: " + String(startResetState));
   if (lastStartResetState == HIGH && startResetState == LOW && currentTime - lastStartResetTrigger > 200) {
     lastStartResetTrigger = currentTime;
     if (raceStarted) {
@@ -1728,10 +1818,11 @@ void handleButtons() {
   }
   lastStartResetState = startResetState;
 
-  // Red Lane Button (GPIO 25)
+  // Red Lane Button
   static int lastRedButtonState = HIGH;
   static unsigned long lastRedTrigger = 0;
   int redButtonState = digitalRead(RED_BUTTON_PIN);
+  Serial.println("DEBUG: Red button state: " + String(redButtonState));
   if (lastRedButtonState == HIGH && redButtonState == LOW && currentTime - lastRedTrigger > 200 && raceStarted && redLane.startSequencePhase == 0) {
     lastRedTrigger = currentTime;
     handleLap(&redLane, "Red", RED_LED_PIN, nullptr);
@@ -1740,10 +1831,11 @@ void handleButtons() {
   }
   lastRedButtonState = redButtonState;
 
-  // Yellow Lane Button (GPIO 27)
+  // Yellow Lane Button
   static int lastYellowButtonState = HIGH;
   static unsigned long lastYellowTrigger = 0;
   int yellowButtonState = digitalRead(YELLOW_BUTTON_PIN);
+  Serial.println("DEBUG: Yellow button state: " + String(yellowButtonState));
   if (lastYellowButtonState == HIGH && yellowButtonState == LOW && currentTime - lastYellowTrigger > 200 && raceStarted && yellowLane.startSequencePhase == 0) {
     lastYellowTrigger = currentTime;
     handleLap(&yellowLane, "Yellow", YELLOW_LED_PIN, nullptr);
@@ -1752,10 +1844,11 @@ void handleButtons() {
   }
   lastYellowButtonState = yellowButtonState;
 
-  // Blue Lane Button (GPIO 26)
+  // Blue Lane Button
   static int lastBlueButtonState = HIGH;
   static unsigned long lastBlueTrigger = 0;
   int blueButtonState = digitalRead(BLUE_BUTTON_PIN);
+  Serial.println("DEBUG: Blue button state: " + String(blueButtonState));
   if (lastBlueButtonState == HIGH && blueButtonState == LOW && currentTime - lastBlueTrigger > 200 && raceStarted && blueLane.startSequencePhase == 0) {
     lastBlueTrigger = currentTime;
     handleLap(&blueLane, "Blue", BLUE_LED_PIN, nullptr);
