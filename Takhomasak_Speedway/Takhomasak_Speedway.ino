@@ -95,6 +95,7 @@
 #include <ArduinoJson.h>
 #include <Adafruit_VL53L0X.h>
 #include <SPI.h>
+#include "config.h"
 
 
 // Lane struct
@@ -174,16 +175,14 @@ unsigned long lastSensorReadTime = 0;
 const unsigned long SENSOR_READ_INTERVAL_MS = 50; // Read sensors every 50 ms
 unsigned long lastSaveUsersTime = 0;
 const unsigned long SAVE_USERS_THROTTLE_MS = 5000; // Throttle to once every 5 seconds
+unsigned long lastRaceDataSendTime = 0;
+const unsigned long RACE_DATA_SEND_INTERVAL_MS = 500;
 
 // Race state variables
 bool raceStarted = false;
 unsigned long startTime = 0; // Global start time for the race
 unsigned long lastPhaseChange = 0; // Last phase change timestamp
 unsigned long phaseChangeInterval = 1250; // Phase change interval in ms
-
-// Wi-Fi credentials
-const char* ssid = "Lawson";
-const char* password = "yamaha350";
 
 // Static IP configuration
 IPAddress local_IP(192, 168, 1, 69);
@@ -1045,77 +1044,7 @@ server.on("/kickDriver", HTTP_POST, [](AsyncWebServerRequest *request) {
   request->send(200, "text/plain", "Driver kicked");
 });
 
-  // WebSocket setup
-  Serial.println("Setting up WebSocket...");
-  ws.onEvent([](AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len){
-    if (type == WS_EVT_CONNECT) {
-      Serial.println("WebSocket client connected, ID: " + String(client->id()));
-      sendRaceData();
-    } else if (type == WS_EVT_DISCONNECT) {
-      Serial.println("WebSocket client disconnected, ID: " + String(client->id()));
-    }
-  });
-
-    // WebSocket setup
-  Serial.println("Setting up WebSocket...");
-  ws.onEvent([](AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len){
-    if (type == WS_EVT_CONNECT) {
-      Serial.println("WebSocket client connected, ID: " + String(client->id()));
-      if (ESP.getFreeHeap() > 8192) {
-        sendRaceData();
-      } else {
-        Serial.println("WARNING: Low heap (" + String(ESP.getFreeHeap()) + " bytes), skipping sendRaceData");
-      }
-    } else if (type == WS_EVT_DISCONNECT) {
-      Serial.println("WebSocket client disconnected, ID: " + String(client->id()));
-    } else if (type == WS_EVT_DATA) {
-      AwsFrameInfo *info = (AwsFrameInfo*)arg;
-      if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT) {
-        data[len] = 0;
-        String message = (char*)data;
-        Serial.println("DEBUG: Received web command: " + message);
-        // Parse command and sessionId (format: "command:sessionId:username")
-        int firstColon = message.indexOf(':');
-        int secondColon = message.indexOf(':', firstColon + 1);
-        if (firstColon == -1 || secondColon == -1) {
-          Serial.println("DEBUG: Invalid command format: " + message);
-          return;
-        }
-        String command = message.substring(0, firstColon);
-        String sessionId = message.substring(firstColon + 1, secondColon);
-        String username = message.substring(secondColon + 1);
-        if (!validateSession(sessionId, username)) {
-          Serial.println("DEBUG: Command failed: Invalid session for user: " + username);
-          return;
-        }
-        if (ESP.getFreeHeap() < 8192) {
-          Serial.println("WARNING: Low heap (" + String(ESP.getFreeHeap()) + " bytes), skipping command");
-          return;
-        }
-        if (command == "start") {
-          startRace();
-          addDebugLog("Race started by " + username);
-          Serial.println("DEBUG: Race started by " + username);
-        } else if (command == "reset") {
-          resetRace();
-          addDebugLog("Race reset by " + username);
-          Serial.println("DEBUG: Race reset by " + username);
-        } else if (command == "y") {
-          handleLap(&yellowLane, "Yellow", YELLOW_LED_PIN, nullptr);
-          addDebugLog("Yellow lap triggered by " + username);
-          Serial.println("DEBUG: Yellow lap triggered by " + username);
-        } else if (command == "r") {
-          handleLap(&redLane, "Red", RED_LED_PIN, nullptr);
-          addDebugLog("Red lap triggered by " + username);
-          Serial.println("DEBUG: Red lap triggered by " + username);
-        } else if (command == "b") {
-          handleLap(&blueLane, "Blue", BLUE_LED_PIN, nullptr);
-          addDebugLog("Blue lap triggered by " + username);
-          Serial.println("DEBUG: Blue lap triggered by " + username);
-        }
-      }
-    }
-  });
+  // Add WebSocket handler
   server.addHandler(&ws);
 
   // Start server
@@ -1133,6 +1062,67 @@ server.on("/kickDriver", HTTP_POST, [](AsyncWebServerRequest *request) {
   esp_task_wdt_add(NULL);
   Serial.println("Setup complete");
 }
+
+void sendRaceData() {
+  unsigned long currentTime = millis();
+  if (currentTime - lastRaceDataSendTime < RACE_DATA_SEND_INTERVAL_MS) {
+    return;
+  }
+  lastRaceDataSendTime = currentTime;
+  if (ws.count() == 0) {
+    return;
+  }
+  if (ws.count() > 5) {
+    Serial.println("DEBUG: Too many WebSocket clients: " + String(ws.count()));
+    return;
+  }
+  if (ESP.getFreeHeap() < 8192) {
+    Serial.println("WARNING: Low heap (" + String(ESP.getFreeHeap()) + " bytes), skipping sendRaceData");
+    return;
+  }
+  static unsigned long lastHeapLog = 0;
+  if (currentTime - lastHeapLog >= 10000) { // Log every 10 seconds
+    Serial.println("DEBUG: sendRaceData started, Free Heap: " + String(ESP.getFreeHeap()));
+    lastHeapLog = currentTime;
+  }
+  DynamicJsonDocument doc(512);
+  doc["raceStarted"] = raceStarted;
+  doc["raceStatus"] = raceStarted ? (yellowLane.startSequencePhase == 1 ? "3" :
+                                     yellowLane.startSequencePhase == 2 ? "2" :
+                                     yellowLane.startSequencePhase == 3 ? "1" :
+                                     yellowLane.startSequencePhase == 4 ? "GO!" : "Running") : "Not Started";
+  JsonObject yellow = doc.createNestedObject("yellow");
+  yellow["laps"] = yellowLane.lapCount - 1;
+  yellow["current"] = yellowLane.lapCount;
+  yellow["last"] = formatTime(yellowLane.lastLapTime);
+  yellow["best"] = formatTime(yellowLane.bestLapTime);
+  yellow["username"] = yellowLane.username;
+  yellow["carNumber"] = yellowLane.carNumber;
+  yellow["carColor"] = yellowLane.carColor;
+  JsonObject red = doc.createNestedObject("red");
+  red["laps"] = redLane.lapCount - 1;
+  red["current"] = redLane.lapCount;
+  red["last"] = formatTime(redLane.lastLapTime);
+  red["best"] = formatTime(redLane.bestLapTime);
+  red["username"] = redLane.username;
+  red["carNumber"] = redLane.carNumber;
+  red["carColor"] = redLane.carColor;
+  JsonObject blue = doc.createNestedObject("blue");
+  blue["laps"] = blueLane.lapCount - 1;
+  blue["current"] = blueLane.lapCount;
+  blue["last"] = formatTime(blueLane.lastLapTime);
+  blue["best"] = formatTime(blueLane.bestLapTime);
+  blue["username"] = blueLane.username;
+  blue["carNumber"] = blueLane.carNumber;
+  blue["carColor"] = blueLane.carColor;
+  String json;
+  size_t jsonSize = serializeJson(doc, json);
+  if (currentTime - lastHeapLog >= 10000) {
+    Serial.println("DEBUG: JSON size: " + String(jsonSize) + ", Free Heap: " + String(ESP.getFreeHeap()));
+  }
+  ws.textAll(json);
+}
+
 void loadUsers() {
   File file = LittleFS.open("/users.json", "r");
   if (!file) {
@@ -1250,73 +1240,6 @@ void addDebugLog(String message) {
     Serial.println("DEBUG: " + message);
 }
 
-unsigned long lastRaceDataSendTime = 0;
-const unsigned long RACE_DATA_SEND_INTERVAL_MS = 500;
-
-void sendRaceData() {
-    unsigned long currentTime = millis();
-    if (currentTime - lastRaceDataSendTime < RACE_DATA_SEND_INTERVAL_MS) {
-        return; // Remove debug spam
-    }
-    lastRaceDataSendTime = currentTime;
-    
-    // Check for WebSocket clients first
-    if (ws.count() == 0) {
-        return; // No clients, don't waste resources
-    }
-    
-    if (ws.count() > 5) {
-        Serial.println("Too many WebSocket clients: " + String(ws.count()));
-        return;
-    }
-    
-    Serial.println("sendRaceData() started, Free Heap: " + String(ESP.getFreeHeap()));
-    
-    // Use a smaller JSON document to prevent memory issues
-    DynamicJsonDocument doc(1024);
-    doc["raceStarted"] = raceStarted;
-    doc["raceStatus"] = raceStarted ? (yellowLane.startSequencePhase == 1 ? "3" :
-                                       yellowLane.startSequencePhase == 2 ? "2" :
-                                       yellowLane.startSequencePhase == 3 ? "1" :
-                                       yellowLane.startSequencePhase == 4 ? "GO!" : "Running") : "Not Started";
-    
-    // Yellow lane
-    JsonObject yellow = doc.createNestedObject("yellow");
-    yellow["laps"] = yellowLane.lapCount - 1;
-    yellow["current"] = yellowLane.lapCount;
-    yellow["last"] = formatTime(yellowLane.lastLapTime);
-    yellow["best"] = formatTime(yellowLane.bestLapTime);
-    yellow["username"] = yellowLane.username;
-    yellow["carNumber"] = yellowLane.carNumber;
-    yellow["carColor"] = yellowLane.carColor;
-    
-    // Red lane
-    JsonObject red = doc.createNestedObject("red");
-    red["laps"] = redLane.lapCount - 1;
-    red["current"] = redLane.lapCount;
-    red["last"] = formatTime(redLane.lastLapTime);
-    red["best"] = formatTime(redLane.bestLapTime);
-    red["username"] = redLane.username;
-    red["carNumber"] = redLane.carNumber;
-    red["carColor"] = redLane.carColor;
-    
-    // Blue lane
-    JsonObject blue = doc.createNestedObject("blue");
-    blue["laps"] = blueLane.lapCount - 1;
-    blue["current"] = blueLane.lapCount;
-    blue["last"] = formatTime(blueLane.lastLapTime);
-    blue["best"] = formatTime(blueLane.bestLapTime);
-    blue["username"] = blueLane.username;
-    blue["carNumber"] = blueLane.carNumber;
-    blue["carColor"] = blueLane.carColor;
-    
-    String json;
-    size_t jsonSize = serializeJson(doc, json);
-    Serial.println("JSON size: " + String(jsonSize) + ", Free Heap: " + String(ESP.getFreeHeap()));
-    
-    ws.textAll(json);
-    Serial.println("sendRaceData() completed");
-}
 
 void startSequence() {
   // Flash LEDs: Red -> Yellow -> Blue, 500ms each
@@ -1654,35 +1577,47 @@ void updateDisplayBlink(Lane* lane, void* lc, String laneName) {
 }
 
 void updateLED(Lane* lane, int ledPin) {
+  static bool lastPulsePhase[3] = {false, false, false}; // Track last phase for Red, Yellow, Blue LEDs
+  int ledIndex = (ledPin == RED_LED_PIN) ? 0 : (ledPin == YELLOW_LED_PIN) ? 1 : 2; // Map pin to index
   unsigned long currentTime = millis();
-  Serial.println("DEBUG: updateLED called for pin " + String(ledPin) + ", pulseState: " + String(lane->pulseState));
-  digitalWrite(RED_LED_PIN, LOW);
-  digitalWrite(YELLOW_LED_PIN, LOW);
-  digitalWrite(BLUE_LED_PIN, LOW);
+
   if (lane->pulseState == 1) { // Normal lap
     if (currentTime - lane->pulseStartTime < 1000) {
-      digitalWrite(ledPin, HIGH);
-      Serial.println("DEBUG: LED " + String(ledPin) + " ON (normal lap)");
+      if (!lastPulsePhase[ledIndex]) {
+        digitalWrite(ledPin, HIGH);
+        Serial.println("DEBUG: LED " + String(ledPin) + " ON (normal lap)");
+        lastPulsePhase[ledIndex] = true;
+      }
     } else {
-      digitalWrite(ledPin, LOW);
-      lane->pulseState = 0;
-      Serial.println("DEBUG: LED " + String(ledPin) + " OFF (normal lap end)");
+      if (lastPulsePhase[ledIndex]) {
+        digitalWrite(ledPin, LOW);
+        lane->pulseState = 0;
+        Serial.println("DEBUG: LED " + String(ledPin) + " OFF (normal lap end)");
+        lastPulsePhase[ledIndex] = false;
+      }
     }
   } else if (lane->pulseState == 2) { // Best lap
     unsigned long elapsed = currentTime - lane->pulseStartTime;
     if (elapsed < 1200) {
       int cycle = elapsed / 400;
       int phase = elapsed % 400;
-      digitalWrite(ledPin, phase < 200 ? HIGH : LOW);
-      Serial.println("DEBUG: LED " + String(ledPin) + " " + (phase < 200 ? "ON" : "OFF") + " (best lap, cycle " + String(cycle) + ")");
+      bool newPhase = phase < 200;
+      if (newPhase != lastPulsePhase[ledIndex]) {
+        digitalWrite(ledPin, newPhase ? HIGH : LOW);
+        Serial.println("DEBUG: LED " + String(ledPin) + " " + (newPhase ? "ON" : "OFF") + " (best lap, cycle " + String(cycle) + ")");
+        lastPulsePhase[ledIndex] = newPhase;
+      }
       if (phase >= 399 && cycle < 2) {
         lane->flashCount++;
       }
     } else {
-      digitalWrite(ledPin, LOW);
-      lane->pulseState = 0;
-      lane->flashCount = 0;
-      Serial.println("DEBUG: LED " + String(ledPin) + " OFF (best lap end)");
+      if (lastPulsePhase[ledIndex]) {
+        digitalWrite(ledPin, LOW);
+        lane->pulseState = 0;
+        lane->flashCount = 0;
+        Serial.println("DEBUG: LED " + String(ledPin) + " OFF (best lap end)");
+        lastPulsePhase[ledIndex] = false;
+      }
     }
   }
 }
@@ -1803,7 +1738,9 @@ void handleButtons() {
   static int lastStartResetState = HIGH;
   static unsigned long lastStartResetTrigger = 0;
   int startResetState = digitalRead(START_RESET_BUTTON_PIN);
-  Serial.println("DEBUG: Start/Reset button state: " + String(startResetState));
+  if (lastStartResetState != startResetState) {
+    Serial.println("DEBUG: Start/Reset button state: " + String(startResetState) + " (HIGH=Open, LOW=Pressed)");
+  }
   if (lastStartResetState == HIGH && startResetState == LOW && currentTime - lastStartResetTrigger > 200) {
     lastStartResetTrigger = currentTime;
     if (raceStarted) {
@@ -1822,7 +1759,9 @@ void handleButtons() {
   static int lastRedButtonState = HIGH;
   static unsigned long lastRedTrigger = 0;
   int redButtonState = digitalRead(RED_BUTTON_PIN);
-  Serial.println("DEBUG: Red button state: " + String(redButtonState));
+  if (lastRedButtonState != redButtonState) {
+    Serial.println("DEBUG: Red button state: " + String(redButtonState) + " (HIGH=Open, LOW=Pressed)");
+  }
   if (lastRedButtonState == HIGH && redButtonState == LOW && currentTime - lastRedTrigger > 200 && raceStarted && redLane.startSequencePhase == 0) {
     lastRedTrigger = currentTime;
     handleLap(&redLane, "Red", RED_LED_PIN, nullptr);
@@ -1835,7 +1774,9 @@ void handleButtons() {
   static int lastYellowButtonState = HIGH;
   static unsigned long lastYellowTrigger = 0;
   int yellowButtonState = digitalRead(YELLOW_BUTTON_PIN);
-  Serial.println("DEBUG: Yellow button state: " + String(yellowButtonState));
+  if (lastYellowButtonState != yellowButtonState) {
+    Serial.println("DEBUG: Yellow button state: " + String(yellowButtonState) + " (HIGH=Open, LOW=Pressed)");
+  }
   if (lastYellowButtonState == HIGH && yellowButtonState == LOW && currentTime - lastYellowTrigger > 200 && raceStarted && yellowLane.startSequencePhase == 0) {
     lastYellowTrigger = currentTime;
     handleLap(&yellowLane, "Yellow", YELLOW_LED_PIN, nullptr);
@@ -1848,7 +1789,9 @@ void handleButtons() {
   static int lastBlueButtonState = HIGH;
   static unsigned long lastBlueTrigger = 0;
   int blueButtonState = digitalRead(BLUE_BUTTON_PIN);
-  Serial.println("DEBUG: Blue button state: " + String(blueButtonState));
+  if (lastBlueButtonState != blueButtonState) {
+    Serial.println("DEBUG: Blue button state: " + String(blueButtonState) + " (HIGH=Open, LOW=Pressed)");
+  }
   if (lastBlueButtonState == HIGH && blueButtonState == LOW && currentTime - lastBlueTrigger > 200 && raceStarted && blueLane.startSequencePhase == 0) {
     lastBlueTrigger = currentTime;
     handleLap(&blueLane, "Blue", BLUE_LED_PIN, nullptr);

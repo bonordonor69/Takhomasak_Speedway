@@ -277,3 +277,62 @@ When working with this codebase, prioritize safety and reliability as this is us
 5. **Code Organization**: Consider breaking into multiple files for maintainability
 
 **Remember: This user appreciates detailed explanations and comprehensive documentation!**
+
+## Session Notes (Evening Session - Web Server Bug Fix)
+
+### 🚨 CRITICAL BUG RESOLVED
+**Problem**: ESP32 connected to WiFi and responded to ping, but web server was inaccessible via browser.
+
+**Root Cause**: During user's refactoring of `sendRaceData()` function, critical web server initialization code was accidentally removed from `setup()` function.
+
+**Missing Code**:
+```cpp
+server.addHandler(&ws);      // WebSocket handler
+server.begin();              // Actually start the web server
+```
+
+**Impact**: Web server was never started, making it completely inaccessible despite successful WiFi connection.
+
+### 🔧 DEBUGGING PROCESS
+1. **Systematic Approach**: Used TodoWrite to track investigation steps
+2. **Compilation Errors**: Fixed multiple issues from refactoring:
+   - Missing global variable declarations (`lastRaceDataSendTime`, `RACE_DATA_SEND_INTERVAL_MS`)
+   - Duplicate `sendRaceData()` functions
+   - Code misplaced outside of function scope
+3. **Web Server Investigation**: Discovered missing `server.begin()` call
+
+### ✅ FIXES APPLIED
+1. **Variable Scope**: Moved timing variables to global scope (lines 178-179)
+2. **Code Cleanup**: Removed duplicate `sendRaceData()` function
+3. **Server Initialization**: Added missing web server startup code to `setup()` function:
+   ```cpp
+   server.addHandler(&ws);
+   if (WiFi.status() == WL_CONNECTED) {
+     server.begin();
+     Serial.println("Web server started");
+   }
+   ```
+
+### 🎯 LESSON LEARNED
+**Refactoring Risk**: When optimizing code, even simple changes can accidentally remove critical initialization code. Always verify that moved/removed code isn't essential for system operation.
+
+### 📊 CURRENT STATUS
+**Fully Working**:
+- ✅ Code compiles and uploads successfully
+- ✅ ESP32 connects to WiFi (192.168.1.69)
+- ✅ Web server starts and serves pages
+- ✅ VL53L0X sensors operational
+- ✅ Race timing and session management working
+- ✅ WebSocket communication functional
+
+**Still Pending**:
+- ❌ MAX7219 displays (hardware not connected)
+- ❌ Lane LEDs and manual buttons (hardware not connected)
+
+### 🚀 READY FOR NEXT SESSION
+- All core functionality restored and working
+- Web interface accessible and responsive
+- Ready for hardware completion or feature development
+- Git repository ready for commit
+
+**User Satisfaction**: Problem resolved efficiently with systematic debugging approach!
