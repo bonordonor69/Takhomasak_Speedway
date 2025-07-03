@@ -27,4 +27,11 @@ Thumbs.db
 *_copy_*/
 *_WORKING*/
 *_backup*/
-*_old*/
+*_old*/config.h
+config.h
+config.h
+Blink.txt
+startRace_fix.ino
+bin/
+red_led_test/
+Takhomasak_Speedway.fzz
